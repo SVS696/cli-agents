@@ -1,0 +1,149 @@
+{
+  "examples": [
+    {
+      "name": "Basic Chat with Memory",
+      "description": "Simple chat that maintains conversation history",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Webhook Trigger",
+            "type": "n8n-nodes-base.webhook",
+            "parameters": {
+              "httpMethod": "POST",
+              "path": "chat"
+            }
+          },
+          {
+            "name": "AI Agent",
+            "type": "n8n-nodes-base.httpRequest",
+            "parameters": {
+              "method": "POST",
+              "url": "http://localhost:8765/chat",
+              "sendBody": true,
+              "bodyParameters": {
+                "parameters": [
+                  {
+                    "name": "message",
+                    "value": "={{ $json.body.message }}"
+                  },
+                  {
+                    "name": "conversation_id",
+                    "value": "={{ $json.body.conversation_id || '' }}"
+                  },
+                  {
+                    "name": "model",
+                    "value": "={{ $json.body.model || 'gemini' }}"
+                  },
+                  {
+                    "name": "system_prompt",
+                    "value": "You are a helpful assistant."
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "Response",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "parameters": {
+              "responseBody": "={{ JSON.stringify($json) }}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Agent with Tools",
+      "description": "AI Agent that can execute bash commands and HTTP requests",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Webhook Trigger",
+            "type": "n8n-nodes-base.webhook",
+            "parameters": {
+              "httpMethod": "POST",
+              "path": "agent"
+            }
+          },
+          {
+            "name": "AI Agent with Tools",
+            "type": "n8n-nodes-base.httpRequest",
+            "parameters": {
+              "method": "POST",
+              "url": "http://localhost:8765/chat",
+              "sendBody": true,
+              "specifyBody": "json",
+              "jsonBody": "={\n  \"message\": \"{{ $json.body.message }}\",\n  \"conversation_id\": \"{{ $json.body.conversation_id || '' }}\",\n  \"model\": \"gemini\",\n  \"system_prompt\": \"You are a helpful AI assistant with access to tools.\",\n  \"tools\": [\n    {\n      \"name\": \"bash\",\n      \"description\": \"Execute bash commands on the server\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"command\": {\"type\": \"string\", \"description\": \"The bash command to execute\"}\n        },\n        \"required\": [\"command\"]\n      }\n    },\n    {\n      \"name\": \"http_request\",\n      \"description\": \"Make HTTP requests to external APIs\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"method\": {\"type\": \"string\", \"enum\": [\"GET\", \"POST\", \"PUT\", \"DELETE\"]},\n          \"url\": {\"type\": \"string\"},\n          \"data\": {\"type\": \"object\"}\n        },\n        \"required\": [\"method\", \"url\"]\n      }\n    }\n  ]\n}"
+            }
+          },
+          {
+            "name": "Response",
+            "type": "n8n-nodes-base.respondToWebhook"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Multi-Model Consensus",
+      "description": "Ask multiple models and compare responses",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook"
+          },
+          {
+            "name": "SplitInBatches",
+            "type": "n8n-nodes-base.splitInBatches",
+            "parameters": {
+              "batchSize": 1
+            }
+          },
+          {
+            "name": "Set Models",
+            "type": "n8n-nodes-base.set",
+            "parameters": {
+              "values": {
+                "string": [
+                  {
+                    "name": "models",
+                    "value": "[\"gemini\", \"claude\", \"qwen\"]"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "Call Each Model",
+            "type": "n8n-nodes-base.httpRequest",
+            "parameters": {
+              "method": "POST",
+              "url": "http://localhost:8765/simple",
+              "jsonBody": "={\n  \"prompt\": \"{{ $json.body.prompt }}\",\n  \"model\": \"{{ $json.model }}\"\n}"
+            }
+          },
+          {
+            "name": "Merge Responses",
+            "type": "n8n-nodes-base.merge"
+          }
+        ]
+      }
+    }
+  ],
+  "curl_examples": {
+    "basic_chat": "curl -X POST http://localhost:8765/chat \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"message\": \"Hello!\", \"model\": \"gemini\"}'",
+
+    "continue_conversation": "curl -X POST http://localhost:8765/chat \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"message\": \"What did I say before?\", \"conversation_id\": \"abc123\", \"model\": \"gemini\"}'",
+
+    "with_tools": "curl -X POST http://localhost:8765/chat \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"message\": \"What is the current date?\",\n    \"model\": \"gemini\",\n    \"tools\": [\n      {\n        \"name\": \"bash\",\n        \"description\": \"Execute bash commands\",\n        \"parameters\": {\"command\": {\"type\": \"string\"}}\n      }\n    ]\n  }'",
+
+    "simple_call": "curl -X POST http://localhost:8765/simple \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"prompt\": \"What is 2+2?\", \"model\": \"gemini\"}'",
+
+    "list_conversations": "curl http://localhost:8765/conversations",
+
+    "get_messages": "curl http://localhost:8765/conversations/abc123/messages",
+
+    "register_tool": "curl -X POST http://localhost:8765/tools/register \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"name\": \"weather\",\n    \"description\": \"Get weather for a city\",\n    \"parameters\": {\"city\": {\"type\": \"string\"}},\n    \"endpoint\": \"http://api.weather.com/v1/current\"\n  }'"
+  },
+  "n8n_code_node_example": "// Code Node example for n8n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://localhost:8765/chat',\n  body: {\n    message: $input.first().json.message,\n    conversation_id: $input.first().json.session_id || null,\n    model: 'gemini',\n    system_prompt: 'You are a helpful customer support agent.',\n    tools: [\n      {\n        name: 'lookup_order',\n        description: 'Look up order by ID',\n        parameters: { order_id: { type: 'string' } },\n        endpoint: 'http://localhost:3000/api/orders'\n      }\n    ]\n  },\n  json: true\n});\n\nreturn [{ json: response }];"
+}
