@@ -1,4 +1,4 @@
-# AI Models Direct - Quick Reference
+# cli-agents - Quick Reference
 
 ## Базовый синтаксис
 

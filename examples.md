@@ -1,4 +1,4 @@
-# AI Models Direct - Examples
+# cli-agents - Examples
 
 ## Basic Model Calls
 

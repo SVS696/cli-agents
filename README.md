@@ -1,4 +1,4 @@
-# AI Models Direct Skill
+# cli-agents Skill
 
 Direct CLI access to multiple AI models without MCP overhead. Binary paths resolved via `$PATH`, so always uses the newest installed version (fnm / homebrew / `~/.local/bin`).
 
@@ -16,7 +16,7 @@ Direct CLI access to multiple AI models without MCP overhead. Binary paths resol
 ### Basic Calls
 
 ```
-Используй ai-models-direct skill для вызова Gemini с промптом:
+Используй cli-agents skill для вызова Gemini с промптом:
 "Проанализируй архитектуру проекта и предложи улучшения"
 ```
 
@@ -29,14 +29,14 @@ Available system prompts:
 - **codex_codereviewer** - Codex-specific code review
 
 ```
-Используй ai-models-direct skill для вызова Codex с системным промптом codereviewer
+Используй cli-agents skill для вызова Codex с системным промптом codereviewer
 для ревью файла src/main.py
 ```
 
 ### With Timeout
 
 ```
-Используй ai-models-direct skill для вызова Gemini с timeout 60 секунд
+Используй cli-agents skill для вызова Gemini с timeout 60 секунд
 для обработки большого файла
 ```
 
@@ -98,7 +98,7 @@ brew install gemini-cli codex-cli qwen-cli claude-cli
 ## Architecture
 
 ```
-ai-models-direct/
+cli-agents/
 ├── skill.json              # Skill configuration for Claude Code
 ├── cli_caller.py           # Main Python script
 ├── systemprompts/          # System prompts
@@ -113,21 +113,21 @@ ai-models-direct/
 
 ### Large Context Analysis with Gemini
 ```
-Используй ai-models-direct для вызова Gemini:
+Используй cli-agents для вызова Gemini:
 Проанализируй все файлы в директории src/ и создай документацию архитектуры
 ```
 
 ### Code Review with Codex
 ```
-Используй ai-models-direct для вызова Codex с systemprompt=codex_codereviewer:
+Используй cli-agents для вызова Codex с systemprompt=codex_codereviewer:
 Проведи полный ревью кода в файлах src/auth/*.py
 ```
 
 ### Planning with Multiple Models
 ```
-1. Используй ai-models-direct/call_gemini с systemprompt=planner для создания плана
-2. Используй ai-models-direct/call_codex для проверки плана
-3. Используй ai-models-direct/call_qwen для альтернативного мнения
+1. Используй cli-agents/call_gemini с systemprompt=planner для создания плана
+2. Используй cli-agents/call_codex для проверки плана
+3. Используй cli-agents/call_qwen для альтернативного мнения
 ```
 
 ## Troubleshooting

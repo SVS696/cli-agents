@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI Models Direct CLI Caller
+cli-agents CLI Caller
 Calls AI models directly via CLI without MCP overhead
 Supports: Gemini (1M), Codex (400k), Qwen (256k+), Claude (200k-1M)
 

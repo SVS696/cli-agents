@@ -4,7 +4,7 @@ description: Direct CLI access to AI models (Gemini 1M, Codex 400k, Qwen 256k, C
 version: 2.1.0
 ---
 
-# AI Models Direct
+# cli-agents
 
 Provides direct CLI access to four AI model families without MCP server overhead. Optimized for code review workflows, large context processing, and multi-model consensus scenarios. The wrapper resolves CLIs via `$PATH`, so it always uses the latest installed version (fnm/homebrew/~/.local/bin).
 
@@ -236,7 +236,7 @@ Verify installation: `which gemini codex qwen claude`
 
 ✅ **Run from skill directory:**
 ```bash
-cd ~/.claude/skills/ai-models-direct
+cd ~/.claude/skills/cli-agents
 python cli_caller.py --model gemini --prompt "..."
 ```
 
@@ -265,7 +265,7 @@ python cli_caller.py --model gemini --prompt "..."
 ### Step 1: Verify Setup
 
 ```bash
-cd ~/.claude/skills/ai-models-direct
+cd ~/.claude/skills/cli-agents
 
 # Check models available
 which gemini codex qwen claude
@@ -311,7 +311,7 @@ Identify common findings across models for high-confidence issues.
 
 **Executor:** Direct CLI invocation via Python subprocess
 
-**System Prompts Location:** `~/.claude/skills/ai-models-direct/systemprompts/`
+**System Prompts Location:** `~/.claude/skills/cli-agents/systemprompts/`
 
 **Supported Models:**
 - Gemini: 1M token context window
