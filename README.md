@@ -130,6 +130,59 @@ cli-agents/
 3. Используй cli-agents/call_qwen для альтернативного мнения
 ```
 
+### Multi-turn Discussion (`--session`)
+Продолжение диалога в одной сессии без передачи истории вручную:
+```bash
+# Turn 1 — fresh session
+python cli_caller.py --model claude --cwd /project \
+  --prompt "Обсуждаем архитектуру auth. Что сейчас не так?"
+
+# Turn 2+ — продолжить тот же thread
+python cli_caller.py --model claude --session last --cwd /project \
+  --prompt "А если middleware + JWT refresh через Redis?"
+```
+Значения `--session`: `new` (default), `last`/`latest`, конкретный id (UUID для codex, индекс для gemini). Работает для всех моделей кроме `codex-review*`.
+
+### Multi-agent Council: Panel (параллельно)
+Несколько моделей отвечают на один вопрос одновременно, синтезатор сводит их в consensus/divergence/recommendation. Быстро и дёшево — хорошо для разведки вариантов.
+```bash
+python agent_council.py --mode panel \
+  --agents gemini-3-pro,codex,claude-opus \
+  --synthesize-with claude-opus \
+  --topic "Migrate 50M-row table to partitioning: range или hash?" \
+  --output ~/discussions/partition.md \
+  --timeout 120
+```
+На выходе — markdown с секциями `## Individual Answers` и `## Synthesis` (Consensus / Divergence / Recommendation).
+
+**Когда использовать:** нужно быстро собрать мнения по варианту, без настоящего спора. Типичный вызов — 15-30 сек, каждый агент видит только вопрос и не читает ответы других.
+
+### Multi-agent Council: Debate (последовательно)
+Агенты по очереди читают общий `discussion.md` и добавляют свой ход. Каждый агент ведёт собственную `--session last`, чтобы свой thread был дёшев. Стоп по `CONCLUDED`, по двум коротким ходам подряд или по лимиту раундов.
+```bash
+python agent_council.py --mode debate \
+  --agents codex,gemini-3-pro,claude-opus \
+  --rounds 4 \
+  --topic "Выбор между SQS и Kafka для нашей нагрузки" \
+  --output ~/discussions/queue.md \
+  --timeout 180
+```
+На выходе — markdown с журналом всех ходов по раундам, пригоден для коммита в PR / вставки в Linear.
+
+**Когда использовать:** настоящий спор с контраргументами, где важно чтобы модель B видела аргументы модели A и оспорила или развила их. Дороже panel (каждый читает растущий файл), но глубже.
+
+### Нативные code review через Codex
+`codex review` — встроенная команда Codex CLI, не самодельный prompt:
+```bash
+# Ревью uncommitted changes в рабочем каталоге
+python cli_caller.py --model codex-review-uncommitted --cwd /path/to/repo
+
+# Ревью с кастомными инструкциями
+python cli_caller.py --model codex-review --cwd /path/to/repo \
+  --prompt "Фокус на security и race conditions"
+```
+Требует trusted git директории (первый запуск из неё — Codex запомнит).
+
 ## Troubleshooting
 
 ### CLI Not Found Error
