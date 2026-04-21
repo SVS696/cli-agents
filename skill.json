@@ -4,7 +4,9 @@
   "description": "CLI AI Agents: Gemini (Auto/3-pro/2.5-pro/flash, 1M ctx), Claude (sonnet-4.6/opus-4.7/haiku-4.5, 200k ctx), Codex (gpt-5.4/5.1-codex, 400k ctx). Includes Ollama-compatible server for n8n.",
   "type": "cli",
   "command": "python",
-  "args": ["cli_caller.py"],
+  "args": [
+    "cli_caller.py"
+  ],
   "tools": [
     {
       "name": "call_gemini",
@@ -12,14 +14,37 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string", "description": "Prompt to send"},
-          "systemprompt": {"type": "string", "enum": ["default", "planner", "codereviewer"]},
-          "cwd": {"type": "string", "description": "Working directory for file access"},
-          "timeout": {"type": "integer", "default": 120}
+          "prompt": {
+            "type": "string",
+            "description": "Prompt to send"
+          },
+          "systemprompt": {
+            "type": "string",
+            "enum": [
+              "default",
+              "planner",
+              "codereviewer"
+            ]
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory for file access"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "gemini", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "gemini",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_gemini_3_pro",
@@ -27,13 +52,27 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 120}
+          "prompt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "gemini-3-pro", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "gemini-3-pro",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_gemini_flash",
@@ -41,13 +80,27 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 60}
+          "prompt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 60
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "gemini-2.5-flash", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "gemini-2.5-flash",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_claude",
@@ -55,14 +108,35 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "systemprompt": {"type": "string", "enum": ["default", "planner", "codereviewer"]},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 120}
+          "prompt": {
+            "type": "string"
+          },
+          "systemprompt": {
+            "type": "string",
+            "enum": [
+              "default",
+              "planner",
+              "codereviewer"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "claude", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "claude",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_claude_sonnet",
@@ -70,13 +144,27 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 120}
+          "prompt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "claude-sonnet", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "claude-sonnet",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_claude_opus",
@@ -84,13 +172,27 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 180}
+          "prompt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 180
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "claude-opus", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "claude-opus",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_codex",
@@ -98,14 +200,36 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "systemprompt": {"type": "string", "enum": ["default", "planner", "codereviewer", "codex_codereviewer"]},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 120}
+          "prompt": {
+            "type": "string"
+          },
+          "systemprompt": {
+            "type": "string",
+            "enum": [
+              "default",
+              "planner",
+              "codereviewer",
+              "codex_codereviewer"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 300
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "codex", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "codex",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_codex_review",
@@ -113,13 +237,29 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string", "description": "Custom review instructions"},
-          "cwd": {"type": "string", "description": "Repo directory to review"},
-          "timeout": {"type": "integer", "default": 180}
+          "prompt": {
+            "type": "string",
+            "description": "Custom review instructions"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Repo directory to review"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 300
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "codex-review", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "codex-review",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_codex_review_uncommitted",
@@ -127,13 +267,29 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string", "description": "Optional extra instructions (can be empty)"},
-          "cwd": {"type": "string", "description": "Repo directory"},
-          "timeout": {"type": "integer", "default": 180}
+          "prompt": {
+            "type": "string",
+            "description": "Optional extra instructions (can be empty)"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Repo directory"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 300
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "codex-review-uncommitted", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "codex-review-uncommitted",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_codex_json",
@@ -141,13 +297,27 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 180}
+          "prompt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 300
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "codex-json", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "codex-json",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "call_gemini_json",
@@ -155,13 +325,27 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {"type": "string"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 120}
+          "prompt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120
+          }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       },
-      "args": ["--model", "gemini-json", "--prompt", "{prompt}"]
+      "args": [
+        "--model",
+        "gemini-json",
+        "--prompt",
+        "{prompt}"
+      ]
     },
     {
       "name": "council_panel",
@@ -169,17 +353,48 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "topic": {"type": "string", "description": "Question for the council"},
-          "agents": {"type": "string", "description": "Comma-separated model names"},
-          "synthesize_with": {"type": "string", "default": "claude-opus"},
-          "output": {"type": "string", "default": "discussion.md"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 180}
+          "topic": {
+            "type": "string",
+            "description": "Question for the council"
+          },
+          "agents": {
+            "type": "string",
+            "description": "Comma-separated model names"
+          },
+          "synthesize_with": {
+            "type": "string",
+            "default": "claude-opus"
+          },
+          "output": {
+            "type": "string",
+            "default": "discussion.md"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 300
+          }
         },
-        "required": ["topic", "agents"]
+        "required": [
+          "topic",
+          "agents"
+        ]
       },
       "script": "agent_council.py",
-      "args": ["--mode", "panel", "--agents", "{agents}", "--topic", "{topic}", "--synthesize-with", "{synthesize_with}", "--output", "{output}"]
+      "args": [
+        "--mode",
+        "panel",
+        "--agents",
+        "{agents}",
+        "--topic",
+        "{topic}",
+        "--synthesize-with",
+        "{synthesize_with}",
+        "--output",
+        "{output}"
+      ]
     },
     {
       "name": "council_debate",
@@ -187,17 +402,47 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "topic": {"type": "string"},
-          "agents": {"type": "string", "description": "Comma-separated model names"},
-          "rounds": {"type": "integer", "default": 5},
-          "output": {"type": "string", "default": "discussion.md"},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 180}
+          "topic": {
+            "type": "string"
+          },
+          "agents": {
+            "type": "string",
+            "description": "Comma-separated model names"
+          },
+          "rounds": {
+            "type": "integer",
+            "default": 5
+          },
+          "output": {
+            "type": "string",
+            "default": "discussion.md"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 300
+          }
         },
-        "required": ["topic", "agents"]
+        "required": [
+          "topic",
+          "agents"
+        ]
       },
       "script": "agent_council.py",
-      "args": ["--mode", "debate", "--agents", "{agents}", "--topic", "{topic}", "--rounds", "{rounds}", "--output", "{output}"]
+      "args": [
+        "--mode",
+        "debate",
+        "--agents",
+        "{agents}",
+        "--topic",
+        "{topic}",
+        "--rounds",
+        "{rounds}",
+        "--output",
+        "{output}"
+      ]
     }
   ],
   "server": {
@@ -205,11 +450,29 @@
     "script": "ollama_compat_server.py",
     "port": 11434,
     "launchd": "com.svs.ollama-compat",
-    "models": ["gemini", "gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash", "claude", "claude-sonnet", "claude-opus", "claude-haiku", "codex"]
+    "models": [
+      "gemini",
+      "gemini-3-pro",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "claude",
+      "claude-sonnet",
+      "claude-opus",
+      "claude-haiku",
+      "codex"
+    ]
   },
   "metadata": {
     "author": "svs",
-    "tags": ["cli-agents", "ai-models", "gemini", "claude", "codex", "n8n", "ollama"],
+    "tags": [
+      "cli-agents",
+      "ai-models",
+      "gemini",
+      "claude",
+      "codex",
+      "n8n",
+      "ollama"
+    ],
     "models": {
       "gemini": "Auto (3-pro-preview → 2.5-pro), 1M tokens",
       "gemini-3-pro": "Gemini 3 Pro Preview, 1M tokens",

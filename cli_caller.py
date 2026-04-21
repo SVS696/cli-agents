@@ -49,38 +49,40 @@ MODEL_COMMANDS = {
         "context_window": "1M tokens",
     },
     # Codex 0.121+ defaults to gpt-5.4. Other available: gpt-5-codex, gpt-5.1-codex.
+    # gpt-5.4 does heavy reasoning; a trivial prompt already takes ~10s, so give
+    # enough headroom. Override with --timeout for short/long tasks.
     "codex": {
         "cmd": ["codex", "exec", "--skip-git-repo-check"],
-        "timeout": 120,
+        "timeout": 300,
         "context_window": "400k tokens",
     },
     "codex-gpt-5-codex": {
         "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5-codex"],
-        "timeout": 120,
+        "timeout": 300,
         "context_window": "400k tokens",
     },
     "codex-gpt-5.1-codex": {
         "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.1-codex"],
-        "timeout": 120,
+        "timeout": 300,
         "context_window": "400k tokens",
     },
     # Native `codex review` — custom prompt treated as review instructions.
     # Requires cwd to be a trusted git repo (`codex trust-dir <path>` first time).
     "codex-review": {
         "cmd": ["codex", "review"],
-        "timeout": 180,
+        "timeout": 360,
         "context_window": "400k tokens",
     },
     # `codex review --uncommitted` — review staged/unstaged/untracked changes in cwd.
     "codex-review-uncommitted": {
         "cmd": ["codex", "review", "--uncommitted"],
-        "timeout": 180,
+        "timeout": 360,
         "context_window": "400k tokens",
     },
     # `codex exec --json` — structured JSONL events (one event per line) for parsing.
     "codex-json": {
         "cmd": ["codex", "exec", "--skip-git-repo-check", "--json"],
-        "timeout": 180,
+        "timeout": 300,
         "context_window": "400k tokens",
     },
     # Gemini with JSON output — for structured parsing.

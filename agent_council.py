@@ -225,7 +225,7 @@ def main() -> int:
         help="[panel] model used to synthesize (default claude-opus)",
     )
     parser.add_argument("--cwd", help="Working directory for all agents")
-    parser.add_argument("--timeout", type=int, default=180, help="Per-call timeout in seconds")
+    parser.add_argument("--timeout", type=int, default=300, help="Per-call timeout in seconds (gpt-5.4 reasoning can take 2-5 min on complex prompts)")
 
     args = parser.parse_args()
 
