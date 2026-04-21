@@ -10,9 +10,11 @@ stale after upgrades.
 """
 
 import argparse
+import selectors
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Model CLI commands configuration.
@@ -181,10 +183,100 @@ def _apply_session(cmd, model_name, session):
     return cmd
 
 
+def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
+    """
+    Run `cmd` and kill it only if its stdout goes silent for `idle_timeout` seconds
+    (or total wall time exceeds `hard_timeout`). Long CLI sessions that stream
+    progress stay alive as long as they keep writing output.
+
+    Returns (returncode, stdout, stderr, reason) where reason ∈
+    {"ok", "idle", "hard", "error"}.
+    """
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=cwd,
+            text=True,
+            bufsize=1,  # line-buffered
+        )
+    except FileNotFoundError:
+        return (None, "", f"CLI not found: {cmd[0]}", "error")
+
+    sel = selectors.DefaultSelector()
+    sel.register(proc.stdout, selectors.EVENT_READ, "stdout")
+    sel.register(proc.stderr, selectors.EVENT_READ, "stderr")
+
+    out_buf, err_buf = [], []
+    last_activity = time.monotonic()
+    deadline = time.monotonic() + hard_timeout
+    reason = "ok"
+
+    try:
+        while True:
+            now = time.monotonic()
+            if now > deadline:
+                reason = "hard"
+                break
+            if now - last_activity > idle_timeout:
+                reason = "idle"
+                break
+
+            wait = min(idle_timeout - (now - last_activity), deadline - now, 5.0)
+            events = sel.select(timeout=max(wait, 0.1))
+            got_data = False
+            for key, _ in events:
+                chunk = key.fileobj.readline()
+                if not chunk:
+                    sel.unregister(key.fileobj)
+                    continue
+                got_data = True
+                if key.data == "stdout":
+                    out_buf.append(chunk)
+                else:
+                    err_buf.append(chunk)
+            if got_data:
+                last_activity = time.monotonic()
+
+            # All streams closed → process is done.
+            if not sel.get_map() and proc.poll() is not None:
+                break
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        # Drain anything left.
+        try:
+            tail_out, tail_err = proc.communicate(timeout=2)
+            if tail_out:
+                out_buf.append(tail_out)
+            if tail_err:
+                err_buf.append(tail_err)
+        except Exception:
+            pass
+
+    return (proc.returncode, "".join(out_buf), "".join(err_buf), reason)
+
+
 def call_model(
-    model_name, prompt, systemprompt=None, timeout=None, cwd=None, session=None
+    model_name,
+    prompt,
+    systemprompt=None,
+    timeout=None,
+    cwd=None,
+    session=None,
+    idle_timeout=None,
 ):
-    """Call AI model via CLI. Pass session to resume a previous conversation."""
+    """Call AI model via CLI. Pass session to resume a previous conversation.
+
+    timeout: hard wall-clock deadline (default 1800s / 30 min).
+    idle_timeout: kill if stdout is silent this long (default per-model, usually 180s).
+    A long review that keeps streaming output stays alive until it finishes.
+    """
     if model_name not in MODEL_COMMANDS:
         print(f"Error: Unknown model '{model_name}'", file=sys.stderr)
         print(f"Available models: {', '.join(MODEL_COMMANDS.keys())}", file=sys.stderr)
@@ -218,34 +310,40 @@ def call_model(
     if not (model_name == "codex-review-uncommitted" and not full_prompt.strip()):
         cmd.append(full_prompt)
 
-    # Use provided timeout or default
-    timeout_value = timeout if timeout else config["timeout"]
+    # hard_timeout: absolute wall-clock cap. Default 30 min — forgiving for long reviews.
+    # idle_timeout: kill only if stdout is silent this long (per-model default).
+    hard = timeout if timeout else 1800
+    idle = idle_timeout if idle_timeout else config["timeout"]
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_value,
-            cwd=cwd
+    rc, out, err, reason = _run_with_idle_timeout(cmd, cwd, idle, hard)
+
+    if reason == "error":
+        print(f"Error calling {model_name}: {err}", file=sys.stderr)
+        return None
+    if reason == "idle":
+        print(
+            f"Error: {model_name} silent for {idle}s (stdout idle timeout). "
+            f"Partial output below. Override with --idle-timeout.",
+            file=sys.stderr,
         )
-
-        if result.returncode != 0:
-            print(f"Error calling {model_name}:", file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
-            return None
-
-        return result.stdout
-
-    except subprocess.TimeoutExpired:
-        print(f"Error: {model_name} call timed out after {timeout_value}s", file=sys.stderr)
+        if out:
+            return out
         return None
-    except FileNotFoundError:
-        print(f"Error: {model_name} CLI not found. Install it first.", file=sys.stderr)
+    if reason == "hard":
+        print(
+            f"Error: {model_name} exceeded hard timeout of {hard}s. "
+            f"Override with --timeout.",
+            file=sys.stderr,
+        )
+        if out:
+            return out
         return None
-    except Exception as e:
-        print(f"Error calling {model_name}: {e}", file=sys.stderr)
+    if rc != 0:
+        print(f"Error calling {model_name} (exit {rc}):", file=sys.stderr)
+        if err:
+            print(err, file=sys.stderr)
         return None
+    return out
 
 def main():
     parser = argparse.ArgumentParser(
@@ -273,7 +371,20 @@ def main():
     parser.add_argument(
         "--timeout",
         type=int,
-        help="Timeout in seconds (default: 30)"
+        help=(
+            "Hard wall-clock cap in seconds (default 1800 = 30 min). "
+            "The process is NOT killed as long as it streams output; this is only "
+            "the ceiling. For ordinary sizing use --idle-timeout."
+        ),
+    )
+    parser.add_argument(
+        "--idle-timeout",
+        type=int,
+        help=(
+            "Kill the call if stdout is silent this long (default per model, "
+            "usually 180-360s). A streaming review that keeps emitting output "
+            "stays alive indefinitely (up to --timeout)."
+        ),
     )
     parser.add_argument(
         "--info",
@@ -319,6 +430,7 @@ def main():
         args.timeout,
         args.cwd,
         args.session,
+        args.idle_timeout,
     )
 
     if result:
