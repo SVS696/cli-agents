@@ -40,11 +40,6 @@ python cli_caller.py --model gemini \
 python cli_caller.py --model codex \
   --prompt "Review src/auth/*.py focusing on code quality" \
   --systemprompt codex_codereviewer
-
-# Step 3: Qwen - Alternative perspective
-python cli_caller.py --model qwen \
-  --prompt "Review src/auth/*.py for maintainability" \
-  --systemprompt codereviewer
 ```
 
 ## Large Context Analysis
@@ -73,11 +68,6 @@ python cli_caller.py --model gemini \
 python cli_caller.py --model codex \
   --prompt "Plan migration from JavaScript to TypeScript for 50k LOC project" \
   --systemprompt planner
-
-# Qwen - Risk assessment
-python cli_caller.py --model qwen \
-  --prompt "Plan migration from JavaScript to TypeScript for 50k LOC project. Focus on risks and mitigation." \
-  --systemprompt planner
 ```
 
 ## Combining with Other Tools
@@ -91,7 +81,6 @@ file_content=$(cat src/complex_logic.py)
 # 2. Get multiple opinions
 python cli_caller.py --model gemini --prompt "Review this code: $file_content" --systemprompt codereviewer
 python cli_caller.py --model codex --prompt "Review this code: $file_content" --systemprompt codex_codereviewer
-python cli_caller.py --model qwen --prompt "Review this code: $file_content" --systemprompt codereviewer
 ```
 
 ## Error Handling
@@ -109,10 +98,10 @@ python cli_caller.py --model gemini \
 
 ```bash
 # Verify all CLIs are installed
-which gemini codex qwen claude
+which gemini codex claude
 
 # If missing, install (example for Homebrew)
-brew install gemini-cli codex-cli qwen-cli claude-cli
+brew install gemini-cli codex claude-code
 ```
 
 ## Integration Patterns
@@ -122,13 +111,10 @@ brew install gemini-cli codex-cli qwen-cli claude-cli
 Review code sequentially with increasing detail:
 
 ```bash
-# 1. Quick overview (fast model)
-python cli_caller.py --model qwen --prompt "Quick overview of src/api/"
-
-# 2. Detailed review (comprehensive model)
+# 1. Detailed review (comprehensive model)
 python cli_caller.py --model gemini --prompt "Detailed review of src/api/" --systemprompt codereviewer --timeout 60
 
-# 3. Implementation specifics (code-focused model)
+# 2. Implementation specifics (code-focused model)
 python cli_caller.py --model codex --prompt "Implementation review of src/api/" --systemprompt codex_codereviewer
 ```
 
@@ -137,15 +123,13 @@ python cli_caller.py --model codex --prompt "Implementation review of src/api/" 
 Get multiple opinions simultaneously:
 
 ```bash
-# Launch all three in background (example)
+# Launch both in background
 python cli_caller.py --model gemini --prompt "Architecture decision: monolith vs microservices" > gemini.txt &
 python cli_caller.py --model codex --prompt "Architecture decision: monolith vs microservices" > codex.txt &
-python cli_caller.py --model qwen --prompt "Architecture decision: monolith vs microservices" > qwen.txt &
 wait
 
 # Compare results
 diff gemini.txt codex.txt
-diff codex.txt qwen.txt
 ```
 
 ### Pattern 3: Staged Analysis
@@ -158,15 +142,11 @@ python cli_caller.py --model gemini --prompt "Plan refactoring strategy" --syste
 
 # Stage 2: Implementation (Codex - code generation)
 python cli_caller.py --model codex --prompt "Generate refactored code based on plan"
-
-# Stage 3: Verification (Qwen - validation)
-python cli_caller.py --model qwen --prompt "Verify refactored code follows plan" --systemprompt codereviewer
 ```
 
 ## Tips
 
 1. **Use Gemini for large files**: Context window of 1M tokens handles entire codebases
 2. **Use Codex for code generation**: Best for writing and refactoring code
-3. **Use Qwen for quick checks**: Fast responses for simple queries
-4. **Combine system prompts**: Different prompts give different perspectives
-5. **Increase timeout for complex tasks**: Default 30s may not be enough for large analyses
+3. **Combine system prompts**: Different prompts give different perspectives
+4. **Increase timeout for complex tasks**: Default 30s may not be enough for large analyses

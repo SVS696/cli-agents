@@ -1,7 +1,7 @@
 {
   "name": "cli-agents",
   "version": "2.1.0",
-  "description": "CLI AI Agents: Gemini (Auto/3-pro/2.5-pro/flash, 1M ctx), Claude (sonnet-4.6/opus-4.7/haiku-4.5, 200k ctx), Codex (gpt-5.4/5.1-codex, 400k ctx), Qwen (256k ctx). Includes Ollama-compatible server for n8n.",
+  "description": "CLI AI Agents: Gemini (Auto/3-pro/2.5-pro/flash, 1M ctx), Claude (sonnet-4.6/opus-4.7/haiku-4.5, 200k ctx), Codex (gpt-5.4/5.1-codex, 400k ctx). Includes Ollama-compatible server for n8n.",
   "type": "cli",
   "command": "python",
   "args": ["cli_caller.py"],
@@ -198,21 +198,6 @@
       },
       "script": "agent_council.py",
       "args": ["--mode", "debate", "--agents", "{agents}", "--topic", "{topic}", "--rounds", "{rounds}", "--output", "{output}"]
-    },
-    {
-      "name": "call_qwen",
-      "description": "Call Qwen Code model.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "prompt": {"type": "string"},
-          "systemprompt": {"type": "string", "enum": ["default", "planner", "codereviewer"]},
-          "cwd": {"type": "string"},
-          "timeout": {"type": "integer", "default": 60}
-        },
-        "required": ["prompt"]
-      },
-      "args": ["--model", "qwen", "--prompt", "{prompt}"]
     }
   ],
   "server": {
@@ -220,11 +205,11 @@
     "script": "ollama_compat_server.py",
     "port": 11434,
     "launchd": "com.svs.ollama-compat",
-    "models": ["gemini", "gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash", "claude", "claude-sonnet", "claude-opus", "claude-haiku", "codex", "qwen"]
+    "models": ["gemini", "gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash", "claude", "claude-sonnet", "claude-opus", "claude-haiku", "codex"]
   },
   "metadata": {
     "author": "svs",
-    "tags": ["cli-agents", "ai-models", "gemini", "claude", "codex", "qwen", "n8n", "ollama"],
+    "tags": ["cli-agents", "ai-models", "gemini", "claude", "codex", "n8n", "ollama"],
     "models": {
       "gemini": "Auto (3-pro-preview → 2.5-pro), 1M tokens",
       "gemini-3-pro": "Gemini 3 Pro Preview, 1M tokens",
@@ -237,8 +222,7 @@
       "claude-haiku": "Claude Haiku 4.5, 200k tokens",
       "codex": "OpenAI Codex (gpt-5.4 default), 400k tokens",
       "codex-gpt-5-codex": "gpt-5-codex via Codex CLI, 400k tokens",
-      "codex-gpt-5.1-codex": "gpt-5.1-codex via Codex CLI, 400k tokens",
-      "qwen": "Qwen Code, 256k tokens"
+      "codex-gpt-5.1-codex": "gpt-5.1-codex via Codex CLI, 400k tokens"
     }
   }
 }

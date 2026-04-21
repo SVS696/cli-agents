@@ -2,7 +2,7 @@
 """
 cli-agents CLI Caller
 Calls AI models directly via CLI without MCP overhead
-Supports: Gemini (1M), Codex (400k), Qwen (256k+), Claude (200k-1M)
+Supports: Gemini (1M), Codex (400k), Claude (200k-1M)
 
 Uses bare command names so the shell PATH picks the latest installed versions
 (fnm / homebrew / ~/.local/bin) instead of a pinned absolute path that goes
@@ -20,7 +20,6 @@ from pathlib import Path
 # are picked up automatically. Non-interactive flags:
 #   gemini   -> -p/--prompt (headless); positional query triggers interactive mode
 #   codex    -> `exec` subcommand
-#   qwen     -> positional query (defaults to one-shot since 0.3.0)
 #   claude   -> --print
 MODEL_COMMANDS = {
     # Gemini auto — default model (currently gemini-3-pro-preview → gemini-2.5-pro fallback)
@@ -89,11 +88,6 @@ MODEL_COMMANDS = {
         "cmd": ["gemini", "--yolo", "-o", "json", "-p"],
         "timeout": 120,
         "context_window": "1M tokens",
-    },
-    "qwen": {
-        "cmd": ["qwen", "--yolo"],
-        "timeout": 60,
-        "context_window": "256k tokens",
     },
     "claude": {
         "cmd": ["claude", "--print"],
@@ -262,7 +256,7 @@ def main():
         help=(
             "AI model to use. Gemini: gemini (auto), gemini-3-pro, gemini-2.5-pro, "
             "gemini-2.5-flash, gemini-2.5-flash-lite. Codex: codex (gpt-5.4 default), "
-            "codex-gpt-5-codex, codex-gpt-5.1-codex. Qwen: qwen. "
+            "codex-gpt-5-codex, codex-gpt-5.1-codex. "
             "Claude: claude, claude-sonnet (4.6), claude-opus (4.7), claude-haiku (4.5)."
         )
     )

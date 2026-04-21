@@ -10,7 +10,6 @@ python cli_caller.py --model <model> --prompt "<prompt>" [опции]
 
 - `gemini` - 1M tokens
 - `codex` - 128k tokens
-- `qwen` - general
 - `claude` - 200k tokens
 
 ## System Prompts
@@ -26,9 +25,6 @@ python cli_caller.py --model <model> --prompt "<prompt>" [опции]
 # Ревью кода
 python cli_caller.py --model gemini --prompt "Ревью auth.py" --systemprompt default_codereviewer --timeout 60
 python cli_caller.py --model codex --prompt "Ревью auth.py" --systemprompt codex_codereviewer
-
-# Планирование
-python cli_caller.py --model qwen --prompt "План миграции БД" --systemprompt default_planner
 
 # Большие файлы
 python cli_caller.py --model gemini --prompt "Анализ large.py" --timeout 90

@@ -1,6 +1,5 @@
 ---
 name: cli-agents
-description: Direct CLI access to AI models (Gemini 1M, Codex 400k, Qwen 256k, Claude 200k) for code review, large file processing, and multi-model consensus. Use when multiple model opinions needed or processing files >100k tokens.
 version: 2.1.0
 ---
 
@@ -14,7 +13,6 @@ Provides direct CLI access to four AI model families without MCP server overhead
 |--------|---------------|---------|----------|
 | Gemini | gemini-3-pro-preview → 2.5-pro fallback | 1M tokens | Large files, full codebase analysis |
 | Codex | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | 400k tokens | Code generation, refactoring, reasoning |
-| Qwen | Qwen3-Coder | 256k tokens | General code tasks |
 | Claude | Sonnet 4.6 / Opus 4.7 / Haiku 4.5 | 200k tokens (Opus 1M beta) | General purpose |
 
 ## Usage
@@ -30,7 +28,6 @@ python cli_caller.py --model <model> --prompt "<prompt>" [options]
 - `--model`: one of
   - Gemini: `gemini`, `gemini-3-pro`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
   - Codex: `codex`, `codex-gpt-5-codex`, `codex-gpt-5.1-codex`
-  - Qwen: `qwen`
   - Claude: `claude`, `claude-sonnet`, `claude-opus`, `claude-haiku`
 - `--prompt`: Prompt text
 - `--systemprompt`: `default`, `default_planner`, `default_codereviewer`, `codex_codereviewer`
@@ -111,7 +108,6 @@ python agent_council.py --mode debate \
 |-------|-----------------|-----------------|
 | Gemini | Ограничен рабочей директорией | ✅ Да |
 | Codex | Полный доступ к FS | ❌ Нет |
-| Qwen | Ограничен рабочей директорией | ✅ Да |
 | Claude | Зависит от настроек | Опционально |
 
 **Пример с --cwd для доступа к проекту:**
@@ -139,8 +135,6 @@ Invoke when task requires:
 - Security review from different model perspectives
 - Consensus on best practices or patterns
 
-Example scenario: "Review authentication implementation and get opinions from Gemini, Codex, and Qwen"
-
 ### Large Context Processing
 
 Invoke Gemini when:
@@ -164,7 +158,6 @@ Example scenario: "Plan migration to TypeScript - compare strategies from Gemini
 ### Multi-Model Code Review
 
 ```bash
-# Gemini/Qwen требуют --cwd для доступа к файлам проекта
 PROJECT="/path/to/project"
 
 python cli_caller.py --model gemini --cwd "$PROJECT" \
@@ -172,9 +165,6 @@ python cli_caller.py --model gemini --cwd "$PROJECT" \
 
 python cli_caller.py --model codex \
   --prompt "Ревью $PROJECT/auth.py" --systemprompt codex_codereviewer
-
-python cli_caller.py --model qwen --cwd "$PROJECT" \
-  --prompt "Ревью auth.py" --systemprompt default_codereviewer
 ```
 
 ### Large File Analysis (>100k tokens)
@@ -188,7 +178,6 @@ python cli_caller.py --model gemini --prompt "Анализ large_file.py" --time
 ```bash
 python cli_caller.py --model gemini --prompt "План миграции на PostgreSQL" --systemprompt default_planner
 python cli_caller.py --model codex --prompt "План миграции на PostgreSQL" --systemprompt default_planner
-python cli_caller.py --model qwen --prompt "План миграции на PostgreSQL" --systemprompt default_planner
 ```
 
 ## Requirements
@@ -196,10 +185,7 @@ python cli_caller.py --model qwen --prompt "План миграции на Postg
 The following CLI tools must be installed and accessible:
 - `gemini` (Google Gemini CLI)
 - `codex` (OpenAI Codex CLI)
-- `qwen` (Qwen CLI)
 - `claude` (Claude CLI)
-
-Verify installation: `which gemini codex qwen claude`
 
 ## Performance Characteristics
 
@@ -255,7 +241,6 @@ python cli_caller.py --model gemini --prompt "..."
 - Use Codex or Claude for regular code tasks
 
 ❌ **Don't skip model verification:**
-- Always verify CLIs installed: `which gemini codex qwen claude`
 - Test with `--info` flag before production use
 
 ## Complete Example
@@ -268,7 +253,6 @@ python cli_caller.py --model gemini --prompt "..."
 cd ~/.claude/skills/cli-agents
 
 # Check models available
-which gemini codex qwen claude
 
 # Test model connection
 python cli_caller.py --model gemini --info
@@ -289,8 +273,6 @@ python cli_caller.py --model codex \
   --systemprompt codex_codereviewer \
   --timeout 60
 
-# Qwen review (alternative perspective)
-python cli_caller.py --model qwen \
   --prompt "Ревью src/auth/*.py и предложи улучшения" \
   --systemprompt default_codereviewer \
   --timeout 60
@@ -301,7 +283,6 @@ python cli_caller.py --model qwen \
 Compare outputs from all three models:
 - Gemini: Architectural patterns, security concerns
 - Codex: Code quality, refactoring suggestions
-- Qwen: Alternative approaches, edge cases
 
 ### Step 4: Consensus Decision
 
@@ -316,7 +297,6 @@ Identify common findings across models for high-confidence issues.
 **Supported Models:**
 - Gemini: 1M token context window
 - Codex: 128k token context window
-- Qwen: Variable context
 - Claude: 200k token context window
 
 **Tool Inspection:**

@@ -8,7 +8,6 @@ Direct CLI access to multiple AI models without MCP overhead. Binary paths resol
 |--------|---------------|---------------|----------|---------|
 | **Gemini** | 1,000,000 tokens | gemini-3-pro-preview → 2.5-pro fallback | Large context tasks, huge files | `call_gemini` |
 | **Codex** | 400,000 tokens | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | Code generation, refactoring, reasoning | `call_codex` |
-| **Qwen** | 256,000 tokens | Qwen3-Coder | General code tasks | `call_qwen` |
 | **Claude** | 200,000 tokens (Opus 1M beta) | Sonnet 4.6 / Opus 4.7 / Haiku 4.5 | General tasks | `call_claude` |
 
 ## Usage from Claude Code
@@ -83,16 +82,15 @@ Codex-specific code reviewer with repository access.
 - CLI tools installed:
   - `gemini` (Google Gemini CLI)
   - `codex` (OpenAI Codex CLI)
-  - `qwen` (Qwen CLI)
   - `claude` (Claude CLI)
 
 Install missing CLIs:
 ```bash
 # Check which are installed
-which gemini codex qwen claude
+which gemini codex claude
 
 # Install as needed (example for Homebrew)
-brew install gemini-cli codex-cli qwen-cli claude-cli
+brew install gemini-cli codex claude-code
 ```
 
 ## Architecture
@@ -127,7 +125,6 @@ cli-agents/
 ```
 1. Используй cli-agents/call_gemini с systemprompt=planner для создания плана
 2. Используй cli-agents/call_codex для проверки плана
-3. Используй cli-agents/call_qwen для альтернативного мнения
 ```
 
 ### Multi-turn Discussion (`--session`)
