@@ -7,7 +7,7 @@ Direct CLI access to multiple AI models without MCP overhead. Binary paths resol
 | Family | Context Window | Default Model | Best For | Command |
 |--------|---------------|---------------|----------|---------|
 | **Gemini** | 1,000,000 tokens | gemini-3-pro-preview → 2.5-pro fallback | Large context tasks, huge files | `call_gemini` |
-| **Codex** | 400,000 tokens | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | Code generation, refactoring, reasoning | `call_codex` |
+| **Codex** | 400,000 tokens | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | Deep reasoning: architecture, planning, research, analysis — not just code | `call_codex` |
 | **Claude** | 200,000 tokens (Opus 1M beta) | Sonnet 4.6 / Opus 4.7 / Haiku 4.5 | General tasks | `call_claude` |
 
 ## Usage from Claude Code

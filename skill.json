@@ -1,7 +1,7 @@
 {
   "name": "cli-agents",
   "version": "2.1.0",
-  "description": "CLI AI Agents: Gemini (Auto/3-pro/2.5-pro/flash, 1M ctx), Claude (sonnet-4.6/opus-4.7/haiku-4.5, 200k ctx), Codex (gpt-5.4/5.1-codex, 400k ctx). Includes Ollama-compatible server for n8n.",
+  "description": "CLI AI Agents: Gemini (Auto/3-pro/2.5-pro/flash, 1M ctx), Claude (sonnet-4.6/opus-4.7/haiku-4.5, 200k ctx), Codex (gpt-5.4, 400k ctx, deep reasoning frontier — not code-only). Includes Ollama-compatible server for n8n.",
   "type": "cli",
   "command": "python",
   "args": [
@@ -196,7 +196,7 @@
     },
     {
       "name": "call_codex",
-      "description": "Call OpenAI Codex (default gpt-5.4). 400k context.",
+      "description": "Call OpenAI Codex (default gpt-5.4). General-purpose reasoning frontier model — architecture, planning, research, analysis, code. 400k context.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -293,7 +293,7 @@
     },
     {
       "name": "call_codex_json",
-      "description": "Call `codex exec --json` for structured JSONL event stream (for parsing).",
+      "description": "Call codex exec --json for structured JSONL event stream. Same underlying model (gpt-5.4) — not code-only.",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -12,7 +12,7 @@ Provides direct CLI access to four AI model families without MCP server overhead
 | Family | Default Model | Context | Best For |
 |--------|---------------|---------|----------|
 | Gemini | gemini-3-pro-preview → 2.5-pro fallback | 1M tokens | Large files, full codebase analysis |
-| Codex | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | 400k tokens | Code generation, refactoring, reasoning |
+| Codex | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | 400k tokens | Deep reasoning: architecture, planning, research, analysis (not just code) |
 | Claude | Sonnet 4.6 / Opus 4.7 / Haiku 4.5 | 200k tokens (Opus 1M beta) | General purpose |
 
 ## Usage
