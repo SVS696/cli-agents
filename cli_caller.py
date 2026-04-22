@@ -195,6 +195,7 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
     try:
         proc = subprocess.Popen(
             cmd,
+            stdin=subprocess.DEVNULL,  # codex 0.121+ hangs forever reading stdin otherwise
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
