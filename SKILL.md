@@ -125,6 +125,9 @@ python cli_caller.py --model gemini \
 - `default_planner.txt` - Structured planning (JSON output)
 - `default_codereviewer.txt` - Code review (Critical/High/Medium/Low)
 - `codex_codereviewer.txt` - Codex-optimized code review
+- `architect_reviewer.txt` - Architecture / ADR / RFC / design doc review
+- `system_analyst.txt` - Functional spec / user story / API contract / data model review
+- `business_analyst.txt` - PRD / product brief / business case review
 
 ## When to Use
 

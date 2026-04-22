@@ -23,7 +23,10 @@
             "enum": [
               "default",
               "planner",
-              "codereviewer"
+              "codereviewer",
+              "architect_reviewer",
+              "system_analyst",
+              "business_analyst"
             ]
           },
           "cwd": {
@@ -116,7 +119,10 @@
             "enum": [
               "default",
               "planner",
-              "codereviewer"
+              "codereviewer",
+              "architect_reviewer",
+              "system_analyst",
+              "business_analyst"
             ]
           },
           "cwd": {
@@ -209,7 +215,10 @@
               "default",
               "planner",
               "codereviewer",
-              "codex_codereviewer"
+              "codex_codereviewer",
+              "architect_reviewer",
+              "system_analyst",
+              "business_analyst"
             ]
           },
           "cwd": {

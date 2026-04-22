@@ -23,9 +23,12 @@ Direct CLI access to multiple AI models without MCP overhead. Binary paths resol
 
 Available system prompts:
 - **default** - General CLI agent behavior
-- **planner** - Planning tasks (JSON output)
-- **codereviewer** - Code review tasks
+- **default_planner** - Planning tasks (JSON output)
+- **default_codereviewer** - Code review (Critical/High/Medium/Low severities)
 - **codex_codereviewer** - Codex-specific code review
+- **architect_reviewer** - Review architectural proposals, ADRs, RFCs, diagrams (decision soundness, failure modes, operability, evolution)
+- **system_analyst** - Review specs, user stories, API contracts, data models (completeness, ambiguity, testability, edge cases)
+- **business_analyst** - Review PRDs, product briefs, business cases (problem framing, metrics, value vs alternatives, risks)
 
 ```
 Используй cli-agents skill для вызова Codex с системным промптом codereviewer
