@@ -12,7 +12,7 @@ Provides direct CLI access to four AI model families without MCP server overhead
 | Family | Default Model | Context | Best For |
 |--------|---------------|---------|----------|
 | Gemini | gemini-3-pro-preview → 2.5-pro fallback | 1M tokens | Large files, full codebase analysis |
-| Codex | gpt-5.4 (also gpt-5-codex, gpt-5.1-codex) | 400k tokens | Deep reasoning: architecture, planning, research, analysis (not just code) |
+| Codex | gpt-5.5 (default; gpt-5.4 explicit fallback) | 400k tokens | Deep reasoning: architecture, planning, research, analysis (not just code) |
 | Claude | Sonnet 4.6 / Opus 4.7 / Haiku 4.5 | 200k tokens (Opus 1M beta) | General purpose |
 
 ## Usage
@@ -27,7 +27,7 @@ python cli_caller.py --model <model> --prompt "<prompt>" [options]
 
 - `--model`: one of
   - Gemini: `gemini`, `gemini-3-pro`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
-  - Codex: `codex`, `codex-gpt-5-codex`, `codex-gpt-5.1-codex`
+  - Codex: `codex` (gpt-5.5 default), `codex-gpt-5.4`, `codex-gpt-5.5`
   - Claude: `claude`, `claude-sonnet`, `claude-opus`, `claude-haiku`
 - `--prompt`: Prompt text
 - `--systemprompt`: `default`, `default_planner`, `default_codereviewer`, `codex_codereviewer`

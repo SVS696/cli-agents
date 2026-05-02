@@ -50,21 +50,23 @@ MODEL_COMMANDS = {
         "timeout": 60,
         "context_window": "1M tokens",
     },
-    # Codex 0.121+ defaults to gpt-5.4. Other available: gpt-5-codex, gpt-5.1-codex.
-    # gpt-5.4 does heavy reasoning; a trivial prompt already takes ~10s, so give
-    # enough headroom. Override with --timeout for short/long tasks.
+    # Codex 0.125+ defaults to gpt-5.5. gpt-5.4 still works as an explicit fallback.
+    # gpt-5-codex / gpt-5.1-codex require an OpenAI API account (not ChatGPT-billing),
+    # so they are intentionally not exposed here — they fail with 400 on ChatGPT auth.
+    # Heavy reasoning: a trivial prompt already takes ~10s, so give enough headroom.
+    # Override with --timeout for short/long tasks.
     "codex": {
         "cmd": ["codex", "exec", "--skip-git-repo-check"],
         "timeout": 300,
         "context_window": "400k tokens",
     },
-    "codex-gpt-5-codex": {
-        "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5-codex"],
+    "codex-gpt-5.4": {
+        "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.4"],
         "timeout": 300,
         "context_window": "400k tokens",
     },
-    "codex-gpt-5.1-codex": {
-        "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.1-codex"],
+    "codex-gpt-5.5": {
+        "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.5"],
         "timeout": 300,
         "context_window": "400k tokens",
     },
@@ -356,8 +358,8 @@ def main():
         choices=list(MODEL_COMMANDS.keys()),
         help=(
             "AI model to use. Gemini: gemini (auto), gemini-3-pro, gemini-2.5-pro, "
-            "gemini-2.5-flash, gemini-2.5-flash-lite. Codex: codex (gpt-5.4 default), "
-            "codex-gpt-5-codex, codex-gpt-5.1-codex. "
+            "gemini-2.5-flash, gemini-2.5-flash-lite. Codex: codex (gpt-5.5 default), "
+            "codex-gpt-5.4, codex-gpt-5.5. "
             "Claude: claude, claude-sonnet (4.6), claude-opus (4.7), claude-haiku (4.5)."
         )
     )
