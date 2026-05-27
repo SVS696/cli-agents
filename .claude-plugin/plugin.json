@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "cli-agents",
+  "version": "2.1.0",
+  "description": "Прямой вызов CLI-моделей (Gemini / Codex / Claude) без MCP-оверхеда + multi-agent council (panel/debate). Для code review, большого контекста и мульти-модельного консенсуса.",
+  "author": {
+    "name": "SVS696",
+    "url": "https://github.com/SVS696"
+  },
+  "homepage": "https://github.com/SVS696/cli-agents",
+  "repository": "https://github.com/SVS696/cli-agents",
+  "license": "MIT",
+  "keywords": ["cli", "gemini", "codex", "claude", "code-review", "multi-agent", "council"]
+}

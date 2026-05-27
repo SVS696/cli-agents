@@ -2,6 +2,20 @@
 
 Direct CLI access to multiple AI models without MCP overhead. Binary paths resolved via `$PATH`, so always uses the newest installed version (fnm / homebrew / `~/.local/bin`).
 
+## Installation
+
+### Via the marketplace (recommended)
+
+```text
+/plugin marketplace add SVS696/svs-skills
+/plugin install cli-agents@svs
+```
+
+Invoke as `/cli-agents:cli-agents` or let it auto-trigger. Update with
+`/plugin update cli-agents@svs`. The provider CLIs (`gemini` / `codex` /
+`claude`) must be installed and authenticated separately — see
+[Requirements](#requirements).
+
 ## Supported Models
 
 | Family | Context Window | Default Model | Best For | Command |
@@ -100,15 +114,26 @@ brew install gemini-cli codex claude-code
 
 ```
 cli-agents/
-├── skill.json              # Skill configuration for Claude Code
-├── cli_caller.py           # Main Python script
-├── systemprompts/          # System prompts
-│   ├── default.txt
-│   ├── planner.txt
-│   ├── codereviewer.txt
-│   └── codex_codereviewer.txt
+├── .claude-plugin/
+│   └── plugin.json         # Plugin manifest (marketplace install)
+├── skills/
+│   └── cli-agents/         # The skill + its scripts (plugin skill dir)
+│       ├── SKILL.md
+│       ├── cli_caller.py       # Main wrapper
+│       ├── agent_council.py    # Multi-agent panel/debate
+│       ├── agent_server.py
+│       ├── ollama_compat_server.py
+│       ├── server.sh
+│       ├── skill.json
+│       └── systemprompts/      # default / planner / codereviewer / ...
+├── examples.md
+├── QUICKREF.md
 └── README.md               # This file
 ```
+
+When installed as a plugin, scripts live at
+`${CLAUDE_PLUGIN_ROOT}/skills/cli-agents/` — `cd` there first, or use the full
+path (the SKILL.md does this automatically).
 
 ## Example Workflows
 

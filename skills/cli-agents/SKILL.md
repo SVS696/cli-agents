@@ -1,11 +1,26 @@
 ---
 name: cli-agents
 version: 2.1.0
+description: |
+  Прямой вызов CLI AI-моделей без MCP-оверхеда: Gemini (Auto/3-pro/2.5-pro/flash,
+  1M контекст), Claude (sonnet-4.6/opus-4.7/haiku-4.5), Codex (gpt-5.5, deep
+  reasoning). Плюс multi-agent council (panel/debate) и code-review.
+  Use when the user wants: a second/third model opinion, multi-model consensus or
+  debate, code review from another model, обработать большой файл/кодбазу в
+  Gemini (>100k токенов), или спланировать через нескольких агентов.
 ---
 
 # cli-agents
 
 Provides direct CLI access to four AI model families without MCP server overhead. Optimized for code review workflows, large context processing, and multi-model consensus scenarios. The wrapper resolves CLIs via `$PATH`, so it always uses the latest installed version (fnm/homebrew/~/.local/bin).
+
+> **Расположение скриптов (plugin).** Все скрипты (`cli_caller.py`,
+> `agent_council.py`, `systemprompts/`) лежат в каталоге этого скилла. Перед
+> запуском перейди в него — тогда относительные пути в примерах ниже работают:
+> ```bash
+> cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
+> ```
+> Либо вызывай с полным путём: `python "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents/cli_caller.py" ...`
 
 ## Available Models
 
@@ -225,7 +240,7 @@ The following CLI tools must be installed and accessible:
 
 ✅ **Run from skill directory:**
 ```bash
-cd ~/.claude/skills/cli-agents
+cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
 python cli_caller.py --model gemini --prompt "..."
 ```
 
@@ -253,7 +268,7 @@ python cli_caller.py --model gemini --prompt "..."
 ### Step 1: Verify Setup
 
 ```bash
-cd ~/.claude/skills/cli-agents
+cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
 
 # Check models available
 
@@ -276,6 +291,8 @@ python cli_caller.py --model codex \
   --systemprompt codex_codereviewer \
   --timeout 60
 
+# Claude review (general perspective, improvements)
+python cli_caller.py --model claude \
   --prompt "Ревью src/auth/*.py и предложи улучшения" \
   --systemprompt default_codereviewer \
   --timeout 60
@@ -295,7 +312,7 @@ Identify common findings across models for high-confidence issues.
 
 **Executor:** Direct CLI invocation via Python subprocess
 
-**System Prompts Location:** `~/.claude/skills/cli-agents/systemprompts/`
+**System Prompts Location:** `${CLAUDE_PLUGIN_ROOT}/skills/cli-agents/systemprompts/`
 
 **Supported Models:**
 - Gemini: 1M token context window
