@@ -5,8 +5,8 @@ Agent Council — multi-model discussion orchestrator.
 Two modes:
 
   debate  : Sequential A→B→C rounds. A shared markdown file is the source of
-            truth; each agent reads it and appends its turn. Each agent also
-            keeps its own `--session last` so its own thread stays cheap.
+            truth; each turn is fresh and receives the complete transcript.
+            This avoids `--session last` cross-talk between provider aliases.
 
   panel   : Parallel one-shot. Every agent answers the topic independently,
             then a synthesizer model reads all answers and produces a
@@ -26,7 +26,7 @@ from pathlib import Path
 
 # Reuse the single-call wrapper.
 sys.path.insert(0, str(Path(__file__).parent))
-from cli_caller import call_model, MODEL_COMMANDS  # noqa: E402
+from cli_caller import DEFAULT_HARD_TIMEOUT, MODEL_COMMANDS, call_model  # noqa: E402
 
 STOP_TOKEN = "CONCLUDED"
 DEFAULT_MIN_LEN = 40  # chars; below this we treat the turn as "nothing to add"
@@ -77,7 +77,9 @@ def run_debate(
     rounds: int,
     min_len: int,
     cwd: str | None,
-    timeout: int,
+    hard_timeout: int,
+    idle_timeout: int | None,
+    access: str,
 ) -> Path:
     output.write_text(
         f"# Debate: {topic}\n\n"
@@ -85,9 +87,6 @@ def run_debate(
         f"_Participants: {', '.join(agents)}_\n\n",
         encoding="utf-8",
     )
-    # Use each agent's OWN session chain so it remembers its own turns cheaply;
-    # shared context comes from reading the file each turn.
-    sessions = {a: None for a in agents}  # None → fresh, later "last"
     short_streak = {a: 0 for a in agents}
     concluded = set()
 
@@ -113,11 +112,11 @@ def run_debate(
                 agent,
                 prompt,
                 systemprompt=None,
-                timeout=timeout,
+                timeout=hard_timeout,
+                idle_timeout=idle_timeout,
                 cwd=cwd,
-                session=sessions[agent],
+                access=access,
             )
-            sessions[agent] = "last"  # next turn resumes its own chain
 
             if reply is None:
                 _append(output, f"\n### {agent}\n_(error — skipped)_\n")
@@ -147,7 +146,10 @@ def run_debate(
             print(f"[{_ts()}] No progress this round — stopping.", file=sys.stderr)
             break
 
-    _append(output, f"\n---\n_Debate ended {_dt.datetime.now().isoformat(timespec='seconds')}_\n")
+    _append(
+        output,
+        f"\n---\n_Debate ended {_dt.datetime.now().isoformat(timespec='seconds')}_\n",
+    )
     return output
 
 
@@ -157,7 +159,9 @@ def run_panel(
     output: Path,
     synth_agent: str,
     cwd: str | None,
-    timeout: int,
+    hard_timeout: int,
+    idle_timeout: int | None,
+    access: str,
 ) -> Path:
     output.write_text(
         f"# Panel: {topic}\n\n"
@@ -169,7 +173,14 @@ def run_panel(
     def one(agent: str) -> tuple[str, str | None]:
         prompt = f"{PANEL_PREAMBLE}\n---\nQuestion:\n{topic}"
         print(f"[{_ts()}] → {agent}", file=sys.stderr)
-        return agent, call_model(agent, prompt, timeout=timeout, cwd=cwd)
+        return agent, call_model(
+            agent,
+            prompt,
+            timeout=hard_timeout,
+            idle_timeout=idle_timeout,
+            cwd=cwd,
+            access=access,
+        )
 
     # Fan out in parallel — agents are independent here.
     answers: dict[str, str] = {}
@@ -189,16 +200,31 @@ def run_panel(
         + "\n".join(f"\n### {a}\n{r}" for a, r in answers.items())
     )
     print(f"[{_ts()}] → synthesizer {synth_agent}", file=sys.stderr)
-    synth = call_model(synth_agent, synth_prompt, timeout=timeout, cwd=cwd) or "_(synth error)_"
+    synth = (
+        call_model(
+            synth_agent,
+            synth_prompt,
+            timeout=hard_timeout,
+            idle_timeout=idle_timeout,
+            cwd=cwd,
+            access=access,
+        )
+        or "_(synth error)_"
+    )
 
     _append(output, "\n## Synthesis\n")
     _append(output, synth.strip() + "\n")
-    _append(output, f"\n---\n_Panel ended {_dt.datetime.now().isoformat(timespec='seconds')}_\n")
+    _append(
+        output,
+        f"\n---\n_Panel ended {_dt.datetime.now().isoformat(timespec='seconds')}_\n",
+    )
     return output
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Multi-agent council: debate or panel.")
+    parser = argparse.ArgumentParser(
+        description="Multi-agent council: debate or panel."
+    )
     parser.add_argument("--mode", required=True, choices=["debate", "panel"])
     parser.add_argument(
         "--agents",
@@ -212,7 +238,9 @@ def main() -> int:
         default="discussion.md",
         help="Markdown file to write/append the transcript to (default: discussion.md)",
     )
-    parser.add_argument("--rounds", type=int, default=5, help="[debate] max rounds (default 5)")
+    parser.add_argument(
+        "--rounds", type=int, default=5, help="[debate] max rounds (default 5)"
+    )
     parser.add_argument(
         "--min-len",
         type=int,
@@ -225,7 +253,28 @@ def main() -> int:
         help="[panel] model used to synthesize (default claude-opus)",
     )
     parser.add_argument("--cwd", help="Working directory for all agents")
-    parser.add_argument("--timeout", type=int, default=300, help="Per-call timeout in seconds (gpt-5.4 reasoning can take 2-5 min on complex prompts)")
+    parser.add_argument(
+        "--hard-timeout",
+        "--timeout",
+        dest="hard_timeout",
+        type=int,
+        default=DEFAULT_HARD_TIMEOUT,
+        help=(
+            "Per-call hard wall-clock cap in seconds "
+            f"(default {DEFAULT_HARD_TIMEOUT}; --timeout is a compatibility alias)"
+        ),
+    )
+    parser.add_argument(
+        "--idle-timeout",
+        type=int,
+        help="Per-call output-idle timeout; omit to use each model profile default",
+    )
+    parser.add_argument(
+        "--access",
+        choices=["read-only", "workspace-write", "inherit"],
+        default="read-only",
+        help="Provider tool-access profile (default read-only)",
+    )
 
     args = parser.parse_args()
 
@@ -234,6 +283,8 @@ def main() -> int:
     topic = args.topic or Path(args.topic_file).read_text(encoding="utf-8").strip()
 
     agents = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if not agents:
+        parser.error("Provide at least one agent in --agents")
     unknown = [a for a in agents if a not in MODEL_COMMANDS]
     if unknown:
         parser.error(f"Unknown agents: {unknown}")
@@ -242,11 +293,30 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     if args.mode == "debate":
-        run_debate(topic, agents, output, args.rounds, args.min_len, args.cwd, args.timeout)
+        run_debate(
+            topic,
+            agents,
+            output,
+            args.rounds,
+            args.min_len,
+            args.cwd,
+            args.hard_timeout,
+            args.idle_timeout,
+            args.access,
+        )
     else:
         if args.synthesize_with not in MODEL_COMMANDS:
             parser.error(f"Unknown synthesizer: {args.synthesize_with}")
-        run_panel(topic, agents, output, args.synthesize_with, args.cwd, args.timeout)
+        run_panel(
+            topic,
+            agents,
+            output,
+            args.synthesize_with,
+            args.cwd,
+            args.hard_timeout,
+            args.idle_timeout,
+            args.access,
+        )
 
     print(str(output))
     return 0

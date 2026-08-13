@@ -1,326 +1,247 @@
 ---
 name: cli-agents
-version: 2.1.0
+version: 3.0.0
 description: |
-  Прямой вызов CLI AI-моделей без MCP-оверхеда: Gemini (Auto/3-pro/2.5-pro/flash,
-  1M контекст), Claude (sonnet-4.6/opus-4.7/haiku-4.5), Codex (gpt-5.5, deep
-  reasoning). Плюс multi-agent council (panel/debate) и code-review.
-  Use when the user wants: a second/third model opinion, multi-model consensus or
-  debate, code review from another model, обработать большой файл/кодбазу в
-  Gemini (>100k токенов), или спланировать через нескольких агентов.
+  Вызывает внешние Claude и Codex CLI для независимого мнения, read-only review,
+  продолжительной дискуссии или multi-model panel/debate. Gemini CLI поддерживается
+  только как необязательный совместимый провайдер. Use when: нужен второй агент, внешний
+  code/spec/architecture review, second opinion, ask another model, проверка спорного
+  решения несколькими моделями, продолжение диалога с внешней моделью или синтез
+  независимых ответов. Не использовать
+  для обычной локальной работы, которую текущий агент способен выполнить сам.
 ---
 
 # cli-agents
 
-Provides direct CLI access to four AI model families without MCP server overhead. Optimized for code review workflows, large context processing, and multi-model consensus scenarios. The wrapper resolves CLIs via `$PATH`, so it always uses the latest installed version (fnm/homebrew/~/.local/bin).
+Обёртка вызывает установленные `claude`, `codex` и, опционально, `gemini` через
+их штатные CLI. Она не фиксирует рекламные названия моделей и размеры контекста:
+эти возможности определяют текущая версия CLI, выбранная модель, аккаунт и локальный
+конфиг провайдера.
 
-> **Расположение скриптов (plugin).** Все скрипты (`cli_caller.py`,
-> `agent_council.py`, `systemprompts/`) лежат в каталоге этого скилла. Перед
-> запуском перейди в него — тогда относительные пути в примерах ниже работают:
-> ```bash
-> cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
-> ```
-> Либо вызывай с полным путём: `python "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents/cli_caller.py" ...`
+По умолчанию каждый вызов read-only. Доступ на запись нужно включать явно.
 
-## Available Models
+## Где лежат скрипты
 
-| Family | Default Model | Context | Best For |
-|--------|---------------|---------|----------|
-| Gemini | gemini-3-pro-preview → 2.5-pro fallback | 1M tokens | Large files, full codebase analysis |
-| Codex | gpt-5.5 (default; gpt-5.4 explicit fallback) | 400k tokens | Deep reasoning: architecture, planning, research, analysis (not just code) |
-| Claude | Sonnet 4.6 / Opus 4.7 / Haiku 4.5 | 200k tokens (Opus 1M beta) | General purpose |
-
-## Usage
+В Claude Code используй каталог плагина:
 
 ```bash
-python cli_caller.py --model <model> --prompt "<prompt>" [options]
+cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
 ```
 
-**Важно**: Команды выполняются из директории скилла или с полным путем к `cli_caller.py`
+В Codex и других клиентах пользовательский скилл обычно доступен по ссылке:
 
-### Options
-
-- `--model`: one of
-  - Gemini: `gemini`, `gemini-3-pro`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
-  - Codex: `codex` (gpt-5.5 default), `codex-gpt-5.4`, `codex-gpt-5.5`
-  - Claude: `claude`, `claude-sonnet`, `claude-opus`, `claude-haiku`
-- `--prompt`: Prompt text
-- `--systemprompt`: `default`, `default_planner`, `default_codereviewer`, `codex_codereviewer`
-- `--timeout`: Seconds (default varies per model, обычно 60-180)
-- `--cwd`: Working directory (даёт модели доступ к файлам в указанной директории)
-- `--session`: Resume for multi-turn discussion — `new` (default), `last`/`latest`, или конкретный id
-- `--info`: Show model info
-
-## Multi-turn Discussion (`--session`)
-
-Скилл умеет продолжать диалог с той же сессией агента — context сохраняется между вызовами, не нужно передавать историю вручную.
-
-| CLI | Механизм | Формат id |
-|-----|----------|-----------|
-| `claude` | `--continue` / `--resume <id>` | session id из Claude |
-| `codex` | `codex exec resume --last` / `resume <uuid>` | UUID из header'а `session id:` |
-| `gemini` | `-r latest` / `-r <index>` | числовой индекс сессии |
-
-**Пример дискуссии:**
 ```bash
-# Turn 1: fresh session
-python cli_caller.py --model claude --prompt "Давай обсудим архитектуру auth" --cwd /project
-
-# Turn 2+: продолжение последней сессии в том же cwd
-python cli_caller.py --model claude --session last --prompt "Что если вынести в отдельный middleware?" --cwd /project
+cd "$HOME/.agents/skills/cli-agents"
 ```
 
-**⚠️ Правила ведения дискуссии (не зацикливаться):**
+Дальше примеры предполагают, что текущий каталог содержит `cli_caller.py`.
 
-1. **Цель → критерий завершения.** Перед диалогом определи, что считается ответом: конкретное решение, список вариантов, согласие по спорному пункту.
-2. **Лимит — по прогрессу, не по числу ходов.** Для серьёзной темы 10-20+ ходов нормально. Стоп-сигналы: агент повторяет прошлый ответ 2 раза подряд, после двух попыток уточнения всё ещё отвечает не по делу, или крутится между 2 позициями без новых аргументов.
-3. **Follow-up конкретный.** Каждый следующий prompt должен двигать вперёд: уточнение, контраргумент, выбор из вариантов, запрос пруфов. Не повторять тот же вопрос другими словами.
-4. **Чек-поинты каждые 5-7 ходов.** Резюмируй, что уже решено и что осталось. Если прогресса 0 за 2 чек-поинта подряд — меняй подход (другая модель, другая постановка, другой источник данных).
-5. **Fork при развилке.** Если нужно исследовать альтернативу — не засоряй основную сессию, начни fresh session (`--session new` по умолчанию).
-6. **Жёсткий потолок — 30 ходов.** За его пределами почти всегда проблема не в модели, а в постановке задачи или данных. Остановись и переформулируй.
+## Провайдеры и профили
 
-**Не поддерживается:** `codex-review` и `codex-review-uncommitted` — это разовые review, resume не применяется.
+| Профиль | Что запускается | Назначение |
+|---|---|---|
+| `codex` | текущий default Codex CLI/config | анализ, реализация, исследование |
+| `codex-review` | нативный `codex review` | review с инструкцией |
+| `codex-review-uncommitted` | `codex review --uncommitted` | review локального diff |
+| `codex-json` | `codex exec --json` | JSONL-поток событий |
+| `claude` | текущий default Claude CLI | общий внешний агент |
+| `claude-opus` | стабильный alias `opus` | сложная логика и сквозной review |
+| `claude-sonnet` | стабильный alias `sonnet` | быстрый общий review |
+| `claude-haiku` | стабильный alias `haiku` | дешёвая локальная проверка |
+| `gemini` | текущий default Gemini CLI | необязательная совместимость |
+| `gemini-json` | Gemini JSON output | необязательная совместимость |
 
-## Multi-agent Council (`agent_council.py`)
+Gemini CLI не нужен для работы скилла и не рекомендуется только ради большого
+контекста. Antigravity не имеет адаптера в этой обёртке.
 
-Два режима совместной работы нескольких моделей:
-
-### Panel (параллельно)
-Все агенты отвечают на один вопрос одновременно → синтезатор собирает consensus / divergence / recommendation.
+Если нужен конкретный provider model ID, передай его отдельно:
 
 ```bash
-python agent_council.py --mode panel \
-  --agents gemini-3-pro,codex,claude-opus \
-  --synthesize-with claude-opus \
-  --topic "Migrate 50M-row table to partitioning: by range or hash?" \
-  --output ~/discussions/partition.md --timeout 120
+python3 cli_caller.py --model codex \
+  --provider-model gpt-5.6-sol \
+  --prompt "Проверь решение"
 ```
 
-Быстро и дёшево — каждый агент видит только вопрос, не других. Хорошо для разведки вариантов, плохо для настоящего спора.
+Без `--provider-model` профиль `codex` уважает текущий Codex config, а Claude-профили
+используют стабильные aliases. Так обновление провайдера не требует править скилл.
 
-### Debate (последовательно)
-Общий `discussion.md` — каждый агент читает файл, добавляет ход. Повторяется `--rounds` раз. Собственная `--session last` у каждого агента → свой thread дешёвый.
+## Базовый вызов
 
 ```bash
-python agent_council.py --mode debate \
-  --agents codex,gemini-3-pro,claude-opus \
-  --rounds 4 \
-  --topic "Выбор между SQS и Kafka для наших объёмов" \
-  --output ~/discussions/queue.md --timeout 180
-```
-
-**Стоп-сигналы в debate:**
-- Агент отвечает `CONCLUDED` (явный отказ от хода)
-- Ответ короче `--min-len` (по умолчанию 40 символов) 2 раза подряд
-- Раунд прошёл без прогресса — никто не добавил контент
-- Достигнут `--rounds`
-
-Весь транскрипт — markdown, пригоден для коммита в PR / приклеивания в Linear.
-
-## File Access
-
-| Model | Доступ к файлам | Требуется --cwd |
-|-------|-----------------|-----------------|
-| Gemini | Ограничен рабочей директорией | ✅ Да |
-| Codex | Полный доступ к FS | ❌ Нет |
-| Claude | Зависит от настроек | Опционально |
-
-**Пример с --cwd для доступа к проекту:**
-```bash
-python cli_caller.py --model gemini \
+python3 cli_caller.py \
+  --model claude-opus \
   --cwd "/path/to/project" \
-  --prompt "Прочитай файл src/main.py и сделай ревью" \
-  --timeout 60
+  --systemprompt architect_reviewer \
+  --prompt "Проведи независимый review ADR. Верни findings с file:line."
 ```
 
-## System Prompts
+Основные параметры:
 
-Имена файлов в `systemprompts/`:
-- `default.txt` - CLI agent for general tasks
-- `default_planner.txt` - Structured planning (JSON output)
-- `default_codereviewer.txt` - Code review (Critical/High/Medium/Low)
-- `codex_codereviewer.txt` - Codex-optimized code review
-- `architect_reviewer.txt` - Architecture / ADR / RFC / design doc review
-- `system_analyst.txt` - Functional spec / user story / API contract / data model review
-- `business_analyst.txt` - PRD / product brief / business case review
+- `--model` — профиль обёртки из таблицы выше;
+- `--provider-model` — необязательный точный model ID провайдера;
+- `--prompt` — задача внешнему агенту;
+- `--cwd` — рабочий каталог и база для относительных путей;
+- `--systemprompt` — имя файла без `.txt` из `systemprompts/`;
+- `--access` — `read-only` (default), `workspace-write` или `inherit`;
+- `--session` — `new`, `last`/`latest` или конкретный session ID;
+- `--idle-timeout` — предел тишины одновременно в stdout и stderr;
+- `--timeout` — жёсткий предел полного вызова, default 1800 секунд;
+- `--info` — показать собранную команду и найденный binary без вызова модели.
 
-## When to Use
+Неверное имя system prompt теперь завершает вызов ошибкой. Раньше обёртка молча
+продолжала без заданной роли, из-за чего review выглядел успешным, хотя запускался
+обычный prompt.
 
-### Code Review Workflows
+## Доступ к файлам
 
-Invoke when task requires:
-- Multiple expert opinions on architecture decisions
-- Security review from different model perspectives
-- Consensus on best practices or patterns
+`--access read-only` используется по умолчанию для внешнего мнения и review:
 
-### Large Context Processing
+- Claude запускается в `permission-mode=plan`;
+- Codex получает read-only sandbox и `approval_policy=never`;
+- Gemini остаётся в штатном approval mode без `--yolo`.
 
-Invoke Gemini when:
-- Processing files >100k tokens
-- Analyzing entire codebase structure
-- Reviewing multiple related files simultaneously
-
-Example scenario: "Analyze all files in src/ directory for architectural patterns"
-
-### Planning with Consensus
-
-Invoke multiple models with `planner` systemprompt when:
-- Migration planning requires multiple approaches
-- Architectural decisions need validation
-- Risk assessment needs diverse perspectives
-
-Example scenario: "Plan migration to TypeScript - compare strategies from Gemini and Codex"
-
-## Typical Workflows
-
-### Multi-Model Code Review
+Для явно порученной реализации:
 
 ```bash
-PROJECT="/path/to/project"
-
-python cli_caller.py --model gemini --cwd "$PROJECT" \
-  --prompt "Ревью auth.py" --systemprompt default_codereviewer --timeout 60
-
-python cli_caller.py --model codex \
-  --prompt "Ревью $PROJECT/auth.py" --systemprompt codex_codereviewer
+python3 cli_caller.py --model claude-opus \
+  --access workspace-write \
+  --cwd "/path/to/project" \
+  --prompt "Реализуй утверждённое изменение и прогони тесты"
 ```
 
-### Large File Analysis (>100k tokens)
+`inherit` не добавляет ограничений обёртки и полностью доверяет локальному конфигу
+CLI. Не используй его для независимого review без отдельной причины.
+
+`workspace-write` тоже работает без approval-промптов: Codex получает
+`approval_policy=never`, Claude автоматически принимает правки, Gemini — edit tools.
+Включай этот режим только для явно порученной реализации в git-каталоге, где можно
+проверить и откатить diff.
+
+## System prompts
+
+Доступные роли:
+
+- `default` — общая задача;
+- `default_planner` — структурированный план;
+- `default_codereviewer` — code review по severity;
+- `codex_codereviewer` — review с учётом возможностей Codex;
+- `architect_reviewer` — ADR, RFC, архитектура и эксплуатационные риски;
+- `system_analyst` — требования, сценарии, API, данные и тестируемость;
+- `business_analyst` — problem framing, ценность, метрики и альтернативы.
+
+Проверить список напрямую:
 
 ```bash
-python cli_caller.py --model gemini --prompt "Анализ large_file.py" --timeout 90
+find systemprompts -maxdepth 1 -name '*.txt' -print | sort
 ```
 
-### Consensus Planning
+## Таймауты
+
+У обёртки два разных предела:
+
+1. `--idle-timeout` останавливает процесс, если оба потока вывода молчат. Без
+   параметра используется профильное значение, обычно 90–360 секунд.
+2. `--timeout` ограничивает всю длительность вызова. Default — 1800 секунд.
+
+Если агент долго думает без вывода, увеличивай `--idle-timeout`. Если задача в целом
+должна идти дольше 30 минут, увеличивай `--timeout`. Уменьшать `--timeout` до 60–120
+секунд для «лечения таймаута» нельзя: это обрежет вызов ещё раньше.
+
+При остановке обёртка завершает всю process group, поэтому дочерний CLI не остаётся
+висеть после timeout.
+
+## Продолжение сессии
 
 ```bash
-python cli_caller.py --model gemini --prompt "План миграции на PostgreSQL" --systemprompt default_planner
-python cli_caller.py --model codex --prompt "План миграции на PostgreSQL" --systemprompt default_planner
+# Новый диалог
+python3 cli_caller.py --model claude-opus --cwd /project \
+  --prompt "Разбери варианты миграции"
+
+# Последняя сессия провайдера в этом cwd
+python3 cli_caller.py --model claude-opus --session last --cwd /project \
+  --prompt "Теперь сравни их по риску отката"
 ```
 
-## Requirements
+`last` — это понятие самого provider CLI, а не отдельный namespace `cli-agents`.
+Если параллельно идут другие диалоги, используй конкретный session ID. Native
+`codex-review*` resume не поддерживает.
 
-The following CLI tools must be installed and accessible:
-- `gemini` (Google Gemini CLI)
-- `codex` (OpenAI Codex CLI)
-- `claude` (Claude CLI)
+Для длинной дискуссии заранее определи результат и критерий завершения. Остановись,
+если агент дважды повторяет ответ, две попытки уточнения не дают прогресса или спор
+крутится между теми же позициями. Каждые 5–7 ходов фиксируй принятые решения и
+оставшиеся вопросы. После 30 ходов лучше переформулировать задачу или сменить источник.
 
-## Performance Characteristics
+## Council
 
-- Direct CLI invocation: ~2-3 seconds per call
-- No MCP initialization overhead
-- Timeout handling: configurable per call
+`agent_council.py` поддерживает два режима. Все вызовы read-only по умолчанию.
 
-## Common Errors
-
-- ❌ `can't open file cli_caller.py` → используй полный путь или cd в директорию скилла
-- ❌ `System prompt 'codereviewer' not found` → используй `default_codereviewer`, не `codereviewer`
-- ❌ `timeout after 30s` → добавь `--timeout 60` для code review, `--timeout 90` для больших файлов
-
-Проверка: `python cli_caller.py --model gemini --info`
-
-## Best Practices
-
-### Do's
-
-✅ **Use appropriate models for tasks:**
-- Gemini for large context (>100k tokens)
-- Codex for code generation and refactoring
-- Multiple models for consensus and validation
-
-✅ **Set adequate timeouts:**
-- Default: 30s for simple queries
-- Code review: 60s
-- Large files: 90s+
-
-✅ **Choose correct system prompts:**
-- `default_codereviewer` for general code review
-- `codex_codereviewer` specifically for Codex
-- `default_planner` for structured planning
-
-✅ **Run from skill directory:**
-```bash
-cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
-python cli_caller.py --model gemini --prompt "..."
-```
-
-### Don'ts
-
-❌ **Don't use wrong system prompt names:**
-- Use `default_codereviewer`, not `codereviewer`
-- Use `default_planner`, not `planner`
-
-❌ **Don't forget timeouts for complex tasks:**
-- Large file analysis will timeout with default 30s
-- Code review needs 60s minimum
-
-❌ **Don't use Gemini for simple tasks:**
-- Reserve 1M context window for truly large files
-- Use Codex or Claude for regular code tasks
-
-❌ **Don't skip model verification:**
-- Test with `--info` flag before production use
-
-## Complete Example
-
-**Scenario:** Review authentication module with multi-model consensus
-
-### Step 1: Verify Setup
+Panel запускает независимые ответы параллельно, затем синтезирует общий вывод:
 
 ```bash
-cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
-
-# Check models available
-
-# Test model connection
-python cli_caller.py --model gemini --info
+python3 agent_council.py --mode panel \
+  --agents codex,claude-opus \
+  --synthesize-with claude-opus \
+  --topic "Range или hash partitioning для этой нагрузки?" \
+  --cwd /project \
+  --output /tmp/partition-panel.md
 ```
 
-### Step 2: Run Multi-Model Review
+Debate передаёт каждому участнику полный markdown-транскрипт предыдущих ходов:
 
 ```bash
-# Gemini review (large context, architectural perspective)
-python cli_caller.py --model gemini \
-  --prompt "Ревью src/auth/*.py на предмет безопасности и архитектуры" \
-  --systemprompt default_codereviewer \
-  --timeout 60
-
-# Codex review (code quality, best practices)
-python cli_caller.py --model codex \
-  --prompt "Ревью src/auth/*.py с фокусом на code quality" \
-  --systemprompt codex_codereviewer \
-  --timeout 60
-
-# Claude review (general perspective, improvements)
-python cli_caller.py --model claude \
-  --prompt "Ревью src/auth/*.py и предложи улучшения" \
-  --systemprompt default_codereviewer \
-  --timeout 60
+python3 agent_council.py --mode debate \
+  --agents codex,claude-opus \
+  --rounds 4 \
+  --topic "SQS или Kafka для заданных требований?" \
+  --cwd /project \
+  --output /tmp/queue-debate.md
 ```
 
-### Step 3: Analyze Results
+Каждый ход debate — новая provider-сессия. Это исключает случайное продолжение
+чужого `last` thread при параллельной работе. Общий файл остаётся источником контекста.
 
-Compare outputs from all three models:
-- Gemini: Architectural patterns, security concerns
-- Codex: Code quality, refactoring suggestions
+Debate завершается по `CONCLUDED`, двум коротким ходам подряд, раунду без прогресса
+или лимиту `--rounds`.
 
-### Step 4: Consensus Decision
+## Когда использовать
 
-Identify common findings across models for high-confidence issues.
+- нужен независимый внешний review кода, постановки или архитектуры;
+- спорное решение полезно проверить двумя разными моделями;
+- требуется продолжительная дискуссия с одним внешним агентом;
+- нужен panel или debate с явным синтезом расхождений;
+- инструкция проекта требует внешнего Claude или Codex.
 
-## Technical Details
+## Когда не использовать
 
-**Executor:** Direct CLI invocation via Python subprocess
+- текущий агент может сам выполнить обычную локальную задачу;
+- пользователь не просил внешнее мнение, а проектный workflow его не требует;
+- достаточно штатного субагента текущей среды;
+- вызов используют только ради заявленного размера контекста;
+- нужен Antigravity: у скилла нет такого провайдера.
 
-**System Prompts Location:** `${CLAUDE_PLUGIN_ROOT}/skills/cli-agents/systemprompts/`
+## Диагностика
 
-**Supported Models:**
-- Gemini: 1M token context window
-- Codex: 128k token context window
-- Claude: 200k token context window
-
-**Tool Inspection:**
 ```bash
-python cli_caller.py --model gemini --info  # Model capabilities
-ls systemprompts/                           # Available prompts
+python3 cli_caller.py --model codex --info
+python3 cli_caller.py --model claude-opus --info
+codex --version
+claude --version
 ```
+
+Типовые ошибки:
+
+- `CLI not found in PATH` — нужный provider CLI не установлен или не попал в PATH;
+- `System prompt ... not found` — возьми точное имя из `systemprompts/`;
+- `working directory does not exist` — исправь `--cwd`;
+- `output idle timeout` — увеличь `--idle-timeout`;
+- `exceeded hard timeout` — увеличь `--timeout`;
+- native Codex review требует git-репозиторий и доверенный рабочий каталог.
+
+Сначала проверяй `--info` и реальные `--version`. Не делай вывод о доступной модели
+или контексте по тексту этого скилла: provider capabilities меняются независимо.
+
+## Ещё примеры
+
+Короткая шпаргалка лежит в `${CLAUDE_PLUGIN_ROOT}/QUICKREF.md`, расширенные рецепты —
+в `${CLAUDE_PLUGIN_ROOT}/examples.md`. Из каталога скилла это `../../QUICKREF.md` и
+`../../examples.md`.

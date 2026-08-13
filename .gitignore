@@ -7,3 +7,6 @@ __pycache__/
 agent_memory.db
 logs/
 *.log
+.in_use/
+.omc/
+.serena/

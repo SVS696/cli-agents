@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 cli-agents CLI Caller
-Calls AI models directly via CLI without MCP overhead
-Supports: Gemini (1M), Codex (400k), Claude (200k-1M)
+Calls external Claude, Codex, and optional Gemini providers via their CLIs.
 
 Uses bare command names so the shell PATH picks the latest installed versions
 (fnm / homebrew / ~/.local/bin) instead of a pinned absolute path that goes
@@ -10,126 +9,154 @@ stale after upgrades.
 """
 
 import argparse
+import os
+import re
 import selectors
 import shutil
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-# Model CLI commands configuration.
-# Commands use bare names resolved via PATH so upgrades (fnm, homebrew, ~/.local/bin)
-# are picked up automatically. Non-interactive flags:
-#   gemini   -> -p/--prompt (headless); positional query triggers interactive mode
-#   codex    -> `exec` subcommand
-#   claude   -> --print
+# Model CLI commands configuration. Provider defaults and stable aliases are
+# intentional: hard-coded dated model ids make this wrapper stale every few
+# months. Use --provider-model when a specific provider model is required.
 MODEL_COMMANDS = {
-    # Gemini auto — default model (currently gemini-3-pro-preview → gemini-2.5-pro fallback)
+    # Gemini remains an optional compatibility provider. The positional query
+    # replaces deprecated -p/--prompt, and --yolo is deliberately not used.
     "gemini": {
-        "cmd": ["gemini", "--yolo", "-p"],
+        "cmd": ["gemini"],
+        "family": "gemini",
         "timeout": 120,
-        "context_window": "1M tokens",
     },
-    "gemini-3-pro": {
-        "cmd": ["gemini", "--yolo", "-m", "gemini-3-pro-preview", "-p"],
-        "timeout": 120,
-        "context_window": "1M tokens",
-    },
-    "gemini-2.5-pro": {
-        "cmd": ["gemini", "--yolo", "-m", "gemini-2.5-pro", "-p"],
-        "timeout": 120,
-        "context_window": "1M tokens",
-    },
-    "gemini-2.5-flash": {
-        "cmd": ["gemini", "--yolo", "-m", "gemini-2.5-flash", "-p"],
-        "timeout": 60,
-        "context_window": "1M tokens",
-    },
-    "gemini-2.5-flash-lite": {
-        "cmd": ["gemini", "--yolo", "-m", "gemini-2.5-flash-lite", "-p"],
-        "timeout": 60,
-        "context_window": "1M tokens",
-    },
-    # Codex 0.125+ defaults to gpt-5.5. gpt-5.4 still works as an explicit fallback.
-    # gpt-5-codex / gpt-5.1-codex require an OpenAI API account (not ChatGPT-billing),
-    # so they are intentionally not exposed here — they fail with 400 on ChatGPT auth.
-    # Heavy reasoning: a trivial prompt already takes ~10s, so give enough headroom.
-    # Override with --timeout for short/long tasks.
+    # Codex uses the current CLI/config default. This preserves local profiles
+    # such as gpt-5.6-sol without baking them into the plugin.
     "codex": {
         "cmd": ["codex", "exec", "--skip-git-repo-check"],
+        "family": "codex",
         "timeout": 300,
-        "context_window": "400k tokens",
-    },
-    "codex-gpt-5.4": {
-        "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.4"],
-        "timeout": 300,
-        "context_window": "400k tokens",
-    },
-    "codex-gpt-5.5": {
-        "cmd": ["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.5"],
-        "timeout": 300,
-        "context_window": "400k tokens",
     },
     # Native `codex review` — custom prompt treated as review instructions.
     # Requires cwd to be a trusted git repo (`codex trust-dir <path>` first time).
     "codex-review": {
         "cmd": ["codex", "review"],
+        "family": "codex",
         "timeout": 360,
-        "context_window": "400k tokens",
     },
     # `codex review --uncommitted` — review staged/unstaged/untracked changes in cwd.
     "codex-review-uncommitted": {
         "cmd": ["codex", "review", "--uncommitted"],
+        "family": "codex",
         "timeout": 360,
-        "context_window": "400k tokens",
     },
     # `codex exec --json` — structured JSONL events (one event per line) for parsing.
     "codex-json": {
         "cmd": ["codex", "exec", "--skip-git-repo-check", "--json"],
+        "family": "codex",
         "timeout": 300,
-        "context_window": "400k tokens",
     },
     # Gemini with JSON output — for structured parsing.
     "gemini-json": {
-        "cmd": ["gemini", "--yolo", "-o", "json", "-p"],
+        "cmd": ["gemini", "--output-format", "json"],
+        "family": "gemini",
         "timeout": 120,
-        "context_window": "1M tokens",
     },
     "claude": {
         "cmd": ["claude", "--print"],
+        "family": "claude",
         "timeout": 120,
-        "context_window": "200k tokens",
     },
     "claude-sonnet": {
-        "cmd": ["claude", "--print", "--model", "claude-sonnet-4-6"],
+        "cmd": ["claude", "--print", "--model", "sonnet"],
+        "family": "claude",
         "timeout": 120,
-        "context_window": "200k tokens",
     },
     "claude-opus": {
-        "cmd": ["claude", "--print", "--model", "claude-opus-4-7"],
+        "cmd": ["claude", "--print", "--model", "opus"],
+        "family": "claude",
         "timeout": 180,
-        "context_window": "200k tokens (1M beta tier)",
     },
     "claude-haiku": {
-        "cmd": ["claude", "--print", "--model", "claude-haiku-4-5-20251001"],
+        "cmd": ["claude", "--print", "--model", "haiku"],
+        "family": "claude",
         "timeout": 90,
-        "context_window": "200k tokens",
     },
 }
+
+ACCESS_MODES = ("read-only", "workspace-write", "inherit")
+DEFAULT_HARD_TIMEOUT = 1800
+IDLE_TIMEOUT_RANGE = (
+    min(config["timeout"] for config in MODEL_COMMANDS.values()),
+    max(config["timeout"] for config in MODEL_COMMANDS.values()),
+)
+
 
 def load_systemprompt(prompt_name):
     """Load system prompt from systemprompts directory"""
     if not prompt_name:
         return None
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", prompt_name):
+        raise ValueError(
+            "System prompt name may contain only letters, digits, '_' and '-'"
+        )
 
     script_dir = Path(__file__).parent
     prompt_file = script_dir / "systemprompts" / f"{prompt_name}.txt"
 
     if not prompt_file.exists():
-        print(f"Warning: System prompt '{prompt_name}' not found at {prompt_file}", file=sys.stderr)
-        return None
+        available = ", ".join(sorted(p.stem for p in prompt_file.parent.glob("*.txt")))
+        raise ValueError(
+            f"System prompt '{prompt_name}' not found. Available: {available or '(none)'}"
+        )
 
-    return prompt_file.read_text()
+    return prompt_file.read_text(encoding="utf-8")
+
+
+def _set_provider_model(cmd, family, provider_model):
+    """Override a provider model without exposing dated aliases in MODEL_COMMANDS."""
+    if not provider_model:
+        return cmd
+
+    flags = ("-m", "--model")
+    for flag in flags:
+        while flag in cmd:
+            i = cmd.index(flag)
+            del cmd[i : i + 2]
+
+    flag = "-m" if family == "codex" else "--model"
+    cmd.extend([flag, provider_model])
+    return cmd
+
+
+def _apply_access(cmd, family, access):
+    """Apply the safe execution profile understood by each provider CLI."""
+    if access not in ACCESS_MODES:
+        raise ValueError(
+            f"Unknown access mode '{access}'. Valid: {', '.join(ACCESS_MODES)}"
+        )
+    if access == "inherit":
+        return cmd
+
+    if family == "claude":
+        mode = "plan" if access == "read-only" else "acceptEdits"
+        cmd.extend(["--permission-mode", mode])
+    elif family == "gemini":
+        mode = "default" if access == "read-only" else "auto_edit"
+        cmd.extend(["--approval-mode", mode])
+    elif family == "codex":
+        # `codex exec resume` and `codex review` do not expose the short
+        # sandbox/approval flags. Config overrides work across all variants.
+        cmd.extend(
+            [
+                "-c",
+                f'sandbox_mode="{access}"',
+                "-c",
+                'approval_policy="never"',
+            ]
+        )
+    return cmd
+
 
 def _apply_session(cmd, model_name, session):
     """
@@ -147,7 +174,7 @@ def _apply_session(cmd, model_name, session):
     if not session or session == "new":
         return cmd
 
-    fam = model_name.split("-")[0]
+    fam = MODEL_COMMANDS[model_name]["family"]
     # codex-review* don't accept resume — treat as unsupported.
     if model_name.startswith("codex-review"):
         print(
@@ -158,25 +185,20 @@ def _apply_session(cmd, model_name, session):
 
     if fam == "gemini":
         token = "latest" if session in ("last", "latest") else session
-        # gemini already has "-p" at end of base cmd; insert -r before it.
-        if "-p" in cmd:
-            i = cmd.index("-p")
-            cmd[i:i] = ["-r", token]
-        else:
-            cmd.extend(["-r", token])
+        cmd.extend(["--resume", token])
     elif fam == "codex":
-        # `codex exec resume [--last | <id>]` — rewrite cmd to insert the resume
-        # subcommand right after `exec`.
-        try:
-            i = cmd.index("exec")
-        except ValueError:
+        # Resume has a different option surface than fresh `exec`; rebuild the
+        # command instead of leaking unsupported --skip-git-repo-check flags.
+        if "exec" not in cmd:
             return cmd
-        insert = ["resume"]
+        keep_json = "--json" in cmd
+        cmd = [cmd[0], "exec", "resume"]
         if session in ("last", "latest"):
-            insert.append("--last")
+            cmd.append("--last")
         else:
-            insert.append(session)
-        cmd[i + 1 : i + 1] = insert
+            cmd.append(session)
+        if keep_json:
+            cmd.append("--json")
     elif fam == "claude":
         if session in ("last", "latest"):
             cmd.append("--continue")
@@ -185,9 +207,19 @@ def _apply_session(cmd, model_name, session):
     return cmd
 
 
+def build_command(model_name, session=None, access="read-only", provider_model=None):
+    """Build a provider command without the final user prompt."""
+    if model_name not in MODEL_COMMANDS:
+        raise ValueError(f"Unknown model '{model_name}'")
+    config = MODEL_COMMANDS[model_name]
+    cmd = _apply_session(config["cmd"].copy(), model_name, session)
+    cmd = _set_provider_model(cmd, config["family"], provider_model)
+    return _apply_access(cmd, config["family"], access)
+
+
 def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
     """
-    Run `cmd` and kill it only if its stdout goes silent for `idle_timeout` seconds
+    Run `cmd` and kill it only if both output streams go silent for `idle_timeout` seconds
     (or total wall time exceeds `hard_timeout`). Long CLI sessions that stream
     progress stay alive as long as they keep writing output.
 
@@ -203,9 +235,10 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
             cwd=cwd,
             text=True,
             bufsize=1,  # line-buffered
+            start_new_session=True,
         )
-    except FileNotFoundError:
-        return (None, "", f"CLI not found: {cmd[0]}", "error")
+    except OSError as exc:
+        return (None, "", f"Failed to start {cmd[0]}: {exc}", "error")
 
     sel = selectors.DefaultSelector()
     sel.register(proc.stdout, selectors.EVENT_READ, "stdout")
@@ -247,11 +280,17 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
                 break
     finally:
         if proc.poll() is None:
-            proc.kill()
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                pass
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
         # Drain anything left.
         try:
             tail_out, tail_err = proc.communicate(timeout=2)
@@ -259,8 +298,9 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
                 out_buf.append(tail_out)
             if tail_err:
                 err_buf.append(tail_err)
-        except Exception:
-            pass
+        except Exception as exc:
+            err_buf.append(f"Failed to drain provider output after termination: {exc}")
+            reason = "error"
 
     return (proc.returncode, "".join(out_buf), "".join(err_buf), reason)
 
@@ -273,11 +313,13 @@ def call_model(
     cwd=None,
     session=None,
     idle_timeout=None,
+    access="read-only",
+    provider_model=None,
 ):
     """Call AI model via CLI. Pass session to resume a previous conversation.
 
-    timeout: hard wall-clock deadline (default 1800s / 30 min).
-    idle_timeout: kill if stdout is silent this long (default per-model, usually 180s).
+    timeout: hard wall-clock deadline (default DEFAULT_HARD_TIMEOUT).
+    idle_timeout: kill if stdout and stderr are silent this long (per-model default).
     A long review that keeps streaming output stays alive until it finishes.
     """
     if model_name not in MODEL_COMMANDS:
@@ -286,7 +328,11 @@ def call_model(
         return None
 
     config = MODEL_COMMANDS[model_name]
-    cmd = config["cmd"].copy()
+    try:
+        cmd = build_command(model_name, session, access, provider_model)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return None
 
     # Resolve binary via PATH; fail early with a clear message if missing.
     resolved = shutil.which(cmd[0])
@@ -299,14 +345,24 @@ def call_model(
         return None
     cmd[0] = resolved
 
-    cmd = _apply_session(cmd, model_name, session)
+    if cwd:
+        cwd_path = Path(cwd).expanduser()
+        if not cwd_path.is_dir():
+            print(
+                f"Error: working directory does not exist: {cwd_path}", file=sys.stderr
+            )
+            return None
+        cwd = str(cwd_path.resolve())
 
     # Combine system prompt with user prompt if provided
     full_prompt = prompt
     if systemprompt:
-        systemprompt_text = load_systemprompt(systemprompt)
-        if systemprompt_text:
-            full_prompt = f"{systemprompt_text}\n\n---\n\nUser Request:\n{prompt}"
+        try:
+            systemprompt_text = load_systemprompt(systemprompt)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return None
+        full_prompt = f"{systemprompt_text}\n\n---\n\nUser Request:\n{prompt}"
 
     # Add prompt to command. `codex review --uncommitted` rejects a positional PROMPT,
     # so skip appending when model is that variant and the prompt is empty.
@@ -314,8 +370,8 @@ def call_model(
         cmd.append(full_prompt)
 
     # hard_timeout: absolute wall-clock cap. Default 30 min — forgiving for long reviews.
-    # idle_timeout: kill only if stdout is silent this long (per-model default).
-    hard = timeout if timeout else 1800
+    # idle_timeout: kill only if both output streams are silent this long.
+    hard = timeout if timeout else DEFAULT_HARD_TIMEOUT
     idle = idle_timeout if idle_timeout else config["timeout"]
 
     rc, out, err, reason = _run_with_idle_timeout(cmd, cwd, idle, hard)
@@ -325,7 +381,7 @@ def call_model(
         return None
     if reason == "idle":
         print(
-            f"Error: {model_name} silent for {idle}s (stdout idle timeout). "
+            f"Error: {model_name} silent for {idle}s (output idle timeout). "
             f"Partial output below. Override with --idle-timeout.",
             file=sys.stderr,
         )
@@ -348,6 +404,7 @@ def call_model(
         return None
     return out
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Call AI models directly via CLI without MCP overhead"
@@ -357,25 +414,33 @@ def main():
         required=True,
         choices=list(MODEL_COMMANDS.keys()),
         help=(
-            "AI model to use. Gemini: gemini (auto), gemini-3-pro, gemini-2.5-pro, "
-            "gemini-2.5-flash, gemini-2.5-flash-lite. Codex: codex (gpt-5.5 default), "
-            "codex-gpt-5.4, codex-gpt-5.5. "
-            "Claude: claude, claude-sonnet (4.6), claude-opus (4.7), claude-haiku (4.5)."
-        )
+            "Wrapper profile. Core: codex, codex-review, codex-review-uncommitted, "
+            "codex-json, claude, claude-sonnet, claude-opus, claude-haiku. "
+            "Optional compatibility: gemini, gemini-json."
+        ),
     )
     parser.add_argument(
-        "--prompt",
-        help="Prompt to send to the model (required unless using --info)"
+        "--provider-model",
+        help=(
+            "Explicit provider model id. Omit to use the provider default or the "
+            "stable alias selected by --model."
+        ),
+    )
+    parser.add_argument(
+        "--prompt", help="Prompt to send to the model (required unless using --info)"
     )
     parser.add_argument(
         "--systemprompt",
-        help="System prompt to prepend (default, planner, codereviewer, codex_codereviewer)"
+        help=(
+            "System prompt file stem from systemprompts/ (for example default, "
+            "default_planner, default_codereviewer, codex_codereviewer)."
+        ),
     )
     parser.add_argument(
         "--timeout",
         type=int,
         help=(
-            "Hard wall-clock cap in seconds (default 1800 = 30 min). "
+            f"Hard wall-clock cap in seconds (default {DEFAULT_HARD_TIMEOUT}). "
             "The process is NOT killed as long as it streams output; this is only "
             "the ceiling. For ordinary sizing use --idle-timeout."
         ),
@@ -384,16 +449,13 @@ def main():
         "--idle-timeout",
         type=int,
         help=(
-            "Kill the call if stdout is silent this long (default per model, "
-            "usually 180-360s). A streaming review that keeps emitting output "
+            "Kill the call if stdout and stderr are silent this long (default per model, "
+            f"currently {IDLE_TIMEOUT_RANGE[0]}-{IDLE_TIMEOUT_RANGE[1]}s). "
+            "A streaming review that keeps emitting output "
             "stays alive indefinitely (up to --timeout)."
         ),
     )
-    parser.add_argument(
-        "--info",
-        action="store_true",
-        help="Show model information"
-    )
+    parser.add_argument("--info", action="store_true", help="Show model information")
     parser.add_argument(
         "--session",
         help=(
@@ -405,7 +467,17 @@ def main():
     )
     parser.add_argument(
         "--cwd",
-        help="Working directory for model execution (enables file access in that directory)"
+        help="Working directory for model execution (enables file access in that directory)",
+    )
+    parser.add_argument(
+        "--access",
+        choices=ACCESS_MODES,
+        default="read-only",
+        help=(
+            "Provider tool-access profile (default: read-only). Use workspace-write "
+            "only for an explicitly authorized implementation task; inherit keeps "
+            "the provider CLI configuration unchanged."
+        ),
     )
 
     args = parser.parse_args()
@@ -413,16 +485,27 @@ def main():
     # Validate arguments. `codex review` variants accept empty prompt (instructions optional).
     review_models = {"codex-review", "codex-review-uncommitted"}
     if not args.info and args.prompt is None and args.model not in review_models:
-        parser.error("--prompt is required unless using --info or a codex-review variant")
+        parser.error(
+            "--prompt is required unless using --info or a codex-review variant"
+        )
     if args.prompt is None:
         args.prompt = ""
 
     # Show model info if requested
     if args.info:
-        print(f"\nModel: {args.model}")
-        print(f"Command: {' '.join(MODEL_COMMANDS[args.model]['cmd'])}")
-        print(f"Context Window: {MODEL_COMMANDS[args.model]['context_window']}")
-        print(f"Default Timeout: {MODEL_COMMANDS[args.model]['timeout']}s")
+        cmd = build_command(
+            args.model,
+            session=args.session,
+            access=args.access,
+            provider_model=args.provider_model,
+        )
+        binary = shutil.which(cmd[0])
+        print(f"\nProfile: {args.model}")
+        print(f"Family: {MODEL_COMMANDS[args.model]['family']}")
+        print(f"CLI: {binary or 'not found'}")
+        print(f"Command: {' '.join(cmd)}")
+        print(f"Default idle timeout: {MODEL_COMMANDS[args.model]['timeout']}s")
+        print(f"Default hard timeout: {DEFAULT_HARD_TIMEOUT}s")
         return 0
 
     # Call the model
@@ -434,13 +517,16 @@ def main():
         args.cwd,
         args.session,
         args.idle_timeout,
+        args.access,
+        args.provider_model,
     )
 
-    if result:
+    if result is not None:
         print(result)
         return 0
     else:
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
