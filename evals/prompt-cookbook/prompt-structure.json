@@ -1,0 +1,12 @@
+{
+  "id": "PC-001-prompt-structure",
+  "targets": ["skills/cli-agents/systemprompts/*.txt"],
+  "contains": ["Goal:", "Output:", "Stop rule:"],
+  "forbidden": [
+    "Zen MCP server",
+    "full repository access",
+    "full CLI access",
+    "Always conclude",
+    "/review"
+  ]
+}

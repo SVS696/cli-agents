@@ -32,6 +32,7 @@ codex --version
 cd "${CLAUDE_PLUGIN_ROOT}/skills/cli-agents"
 
 python3 cli_caller.py --model claude-opus \
+  --stream \
   --cwd /path/to/project \
   --systemprompt architect_reviewer \
   --prompt "Проведи независимый read-only review ADR"
@@ -84,7 +85,24 @@ python3 agent_council.py --mode debate \
   --output /tmp/queue-debate.md
 ```
 
-## Что изменилось в 3.0
+## Что изменилось в 3.0.1
+
+- системные промпты переписаны по текущему OpenAI Prompting Cookbook/GPT-5.6
+  guidance: outcome-first, evidence и access boundaries, явный output contract и
+  stop rule;
+- удалены ложные утверждения про `Zen MCP server`, `full repository access` и
+  устаревший `/review`;
+- фактические `--access` и `--cwd` теперь входят в execution context каждого
+  непустого вызова;
+- read-only Claude запускается в `--safe-mode` с явно запрещёнными write-tools,
+  чтобы hooks/plugins и plan-notes не нарушали изоляцию review;
+- добавлен `--stream`: Claude partial text и Codex JSONL-прогресс показываются
+  вживую, без сырого event dump; при redirect чистый финал остаётся в stdout, а
+  прогресс уходит в stderr;
+- council не заставляет модель выбирать при недостатке evidence и не принимает
+  большинство голосов за доказательство.
+
+## Что изменилось в 3.0.0
 
 - удалены устаревающие aliases конкретных Gemini/Codex model ID;
 - `codex` использует текущий CLI/config default;

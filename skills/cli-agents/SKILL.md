@@ -1,6 +1,5 @@
 ---
 name: cli-agents
-version: 3.0.0
 description: |
   Вызывает внешние Claude и Codex CLI для независимого мнения, read-only review,
   продолжительной дискуссии или multi-model panel/debate. Gemini CLI поддерживается
@@ -70,6 +69,7 @@ python3 cli_caller.py --model codex \
 ```bash
 python3 cli_caller.py \
   --model claude-opus \
+  --stream \
   --cwd "/path/to/project" \
   --systemprompt architect_reviewer \
   --prompt "Проведи независимый review ADR. Верни findings с file:line."
@@ -86,17 +86,33 @@ python3 cli_caller.py \
 - `--session` — `new`, `last`/`latest` или конкретный session ID;
 - `--idle-timeout` — предел тишины одновременно в stdout и stderr;
 - `--timeout` — жёсткий предел полного вызова, default 1800 секунд;
+- `--stream` — показывать прогресс и текст ответа вживую без повторной печати финала;
 - `--info` — показать собранную команду и найденный binary без вызова модели.
+
+В streaming-режиме Claude использует `stream-json` с partial messages, а Codex
+`exec` — JSONL events. Обёртка преобразует их в читаемый текст и короткие tool/status
+события; сырые JSON и содержимое reasoning не печатаются. В интерактивном терминале
+текст ответа идёт прямо в stdout. При pipe/redirect прогресс идёт в stderr, а чистый
+финальный ответ — в stdout, поэтому `--stream > review.md` не загрязняет файл.
+Native `codex review` и Gemini получают best-effort forwarding того, что реально
+выдаёт их CLI, без JSON-разбора.
 
 Неверное имя system prompt теперь завершает вызов ошибкой. Раньше обёртка молча
 продолжала без заданной роли, из-за чего review выглядел успешным, хотя запускался
 обычный prompt.
 
+Перед `User Request` обёртка передаёт модели фактический execution context: выбранный
+`--access` и рабочий каталог. Ролевые промпты не предполагают вымышленную среду или
+безусловный доступ к репозиторию; они задают outcome, evidence contract, формат ответа
+и условие остановки.
+
 ## Доступ к файлам
 
 `--access read-only` используется по умолчанию для внешнего мнения и review:
 
-- Claude запускается в `permission-mode=plan`;
+- Claude запускается с `--safe-mode` в `permission-mode=plan`, а `Edit`, `Write` и
+  `NotebookEdit` явно запрещаются. Это отключает пользовательские hooks/plugins,
+  auto-memory и запись служебного plan-файла, сохраняя штатную авторизацию;
 - Codex получает read-only sandbox и `approval_policy=never`;
 - Gemini остаётся в штатном approval mode без `--yolo`.
 

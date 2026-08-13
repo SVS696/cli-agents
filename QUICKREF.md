@@ -7,6 +7,7 @@ python3 cli_caller.py --model claude-opus --info
 
 # Независимый read-only review (default)
 python3 cli_caller.py --model claude-opus \
+  --stream \
   --cwd /project \
   --systemprompt default_codereviewer \
   --prompt "Проведи review текущего diff"
@@ -33,6 +34,9 @@ python3 cli_caller.py --model claude-opus \
 
 - `--idle-timeout` — допустимая тишина stdout и stderr;
 - `--timeout` — жёсткая длительность всего вызова, default 1800 секунд.
+
+`--stream` показывает Claude partial messages или Codex JSONL-прогресс вживую.
+При redirect прогресс идёт в stderr, чистый финал — в stdout.
 
 System prompts: `default`, `default_planner`, `default_codereviewer`,
 `codex_codereviewer`, `architect_reviewer`, `system_analyst`, `business_analyst`.

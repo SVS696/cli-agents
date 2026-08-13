@@ -1,0 +1,12 @@
+{
+  "id": "PC-002-planner-format",
+  "targets": ["skills/cli-agents/systemprompts/default_planner.txt"],
+  "contains": [
+    "Return one valid JSON object and no Markdown or commentary.",
+    "\"status\": \"ready | blocked\"",
+    "\"phases\"",
+    "\"open_questions\"",
+    "\"next_action\""
+  ],
+  "forbidden": ["etc.", "files_required_to_continue"]
+}

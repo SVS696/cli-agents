@@ -33,6 +33,7 @@ python3 cli_caller.py --model codex \
 
 ```bash
 python3 cli_caller.py --model claude-opus \
+  --stream \
   --idle-timeout 900 \
   --timeout 3600 \
   --cwd /project \

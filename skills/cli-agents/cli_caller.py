@@ -9,6 +9,7 @@ stale after upgrades.
 """
 
 import argparse
+import json
 import os
 import re
 import selectors
@@ -139,8 +140,17 @@ def _apply_access(cmd, family, access):
         return cmd
 
     if family == "claude":
-        mode = "plan" if access == "read-only" else "acceptEdits"
-        cmd.extend(["--permission-mode", mode])
+        if access == "read-only":
+            cmd.extend(
+                [
+                    "--permission-mode",
+                    "plan",
+                    "--safe-mode",
+                    "--disallowedTools=Edit,Write,NotebookEdit",
+                ]
+            )
+        else:
+            cmd.extend(["--permission-mode", "acceptEdits"])
     elif family == "gemini":
         mode = "default" if access == "read-only" else "auto_edit"
         cmd.extend(["--approval-mode", mode])
@@ -207,17 +217,202 @@ def _apply_session(cmd, model_name, session):
     return cmd
 
 
-def build_command(model_name, session=None, access="read-only", provider_model=None):
+def _apply_streaming(cmd, family, stream):
+    """Enable the provider's machine-readable live event stream when supported."""
+    if not stream:
+        return cmd
+    if family == "claude":
+        cmd.extend(
+            [
+                "--output-format",
+                "stream-json",
+                "--include-partial-messages",
+                "--verbose",
+            ]
+        )
+    elif family == "codex" and "exec" in cmd and "--json" not in cmd:
+        cmd.append("--json")
+    return cmd
+
+
+def _profile_uses_structured_stream(model_name, stream):
+    """Whether --stream selects a JSON event format for this wrapper profile."""
+    if not stream:
+        return False
+    family = MODEL_COMMANDS[model_name]["family"]
+    return family == "claude" or (
+        family == "codex" and not model_name.startswith("codex-review")
+    )
+
+
+def _as_dict(value):
+    """Return a mapping for schema-tolerant event parsing."""
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value):
+    """Return a list for schema-tolerant event parsing."""
+    return value if isinstance(value, list) else []
+
+
+def build_command(
+    model_name,
+    session=None,
+    access="read-only",
+    provider_model=None,
+    stream=False,
+):
     """Build a provider command without the final user prompt."""
     if model_name not in MODEL_COMMANDS:
         raise ValueError(f"Unknown model '{model_name}'")
     config = MODEL_COMMANDS[model_name]
     cmd = _apply_session(config["cmd"].copy(), model_name, session)
     cmd = _set_provider_model(cmd, config["family"], provider_model)
-    return _apply_access(cmd, config["family"], access)
+    cmd = _apply_access(cmd, config["family"], access)
+    return _apply_streaming(cmd, config["family"], stream)
 
 
-def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
+def _emit_live_line(family, line, channel, state):
+    """Render provider event streams as readable live progress."""
+    target = sys.stdout if channel == "stdout" else sys.stderr
+    if channel == "stderr" or family not in {"claude", "codex"}:
+        print(line, end="", file=target, flush=True)
+        return
+
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        print(line, end="", file=target, flush=True)
+        return
+    if not isinstance(event, dict):
+        print(line, end="", file=target, flush=True)
+        return
+
+    if family == "claude":
+        text_target = (
+            sys.stdout if state.get("live_text_to_stdout") else sys.stderr
+        )
+        if event.get("type") == "stream_event":
+            delta = _as_dict(_as_dict(event.get("event")).get("delta"))
+            if delta.get("type") == "text_delta":
+                text = delta.get("text", "")
+                if not isinstance(text, str):
+                    text = ""
+                if text:
+                    print(text, end="", file=text_target, flush=True)
+                    state["emitted_text"] = True
+                    state["last_char"] = text[-1]
+        elif event.get("type") == "assistant":
+            content = _as_list(_as_dict(event.get("message")).get("content"))
+            for raw_block in content:
+                block = _as_dict(raw_block)
+                if block.get("type") == "tool_use":
+                    if state.get("emitted_text") and state.get("last_char") != "\n":
+                        print(file=text_target, flush=True)
+                        state["last_char"] = "\n"
+                    print(
+                        f"[claude] tool: {block.get('name', 'unknown')}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+        elif event.get("type") == "result":
+            result = event.get("result", "")
+            if not isinstance(result, str):
+                result = ""
+            if result and not state.get("emitted_text"):
+                print(result, end="", file=text_target, flush=True)
+                state["emitted_text"] = True
+                state["last_char"] = result[-1]
+            if state.get("emitted_text") and state.get("last_char") != "\n":
+                print(file=text_target, flush=True)
+                state["last_char"] = "\n"
+        return
+
+    item = _as_dict(event.get("item"))
+    item_type = item.get("type")
+    if event.get("type") == "thread.started":
+        print(
+            f"[codex] session: {event.get('thread_id', 'unknown')}",
+            file=sys.stderr,
+            flush=True,
+        )
+    elif event.get("type") == "item.started" and item_type == "command_execution":
+        print(
+            f"[codex] command: {item.get('command', 'unknown')}",
+            file=sys.stderr,
+            flush=True,
+        )
+    elif event.get("type") == "item.started" and item_type == "mcp_tool_call":
+        label = item.get("tool") or item.get("name") or "unknown"
+        print(f"[codex] tool: {label}", file=sys.stderr, flush=True)
+    elif event.get("type") == "item.completed" and item_type == "agent_message":
+        text = item.get("text", "")
+        if text:
+            text_target = (
+                sys.stdout if state.get("live_text_to_stdout") else sys.stderr
+            )
+            print(text, file=text_target, flush=True)
+            state["emitted_text"] = True
+            state["last_char"] = "\n"
+    elif event.get("type") == "item.completed" and item_type == "error":
+        print(
+            f"[codex] error: {item.get('message', 'unknown error')}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+def _extract_stream_result_with_status(family, output):
+    """Return (recognized, text) from Claude/Codex JSONL."""
+    final = ""
+    partials = []
+    final_seen = False
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if family == "claude":
+            if event.get("type") == "result" and isinstance(event.get("result"), str):
+                final = event["result"]
+                final_seen = True
+            elif event.get("type") == "stream_event":
+                delta = _as_dict(_as_dict(event.get("event")).get("delta"))
+                if delta.get("type") == "text_delta":
+                    text = delta.get("text", "")
+                    if isinstance(text, str):
+                        partials.append(text)
+        elif (
+            event.get("type") == "item.completed"
+            and _as_dict(event.get("item")).get("type") == "agent_message"
+        ):
+            text = _as_dict(event.get("item")).get("text", "")
+            if isinstance(text, str):
+                final = text
+                final_seen = True
+    if final_seen:
+        return True, final
+    if partials:
+        return True, "".join(partials)
+    return False, ""
+
+
+def _extract_stream_result(family, output):
+    """Recover only the final assistant text from Claude/Codex JSONL."""
+    return _extract_stream_result_with_status(family, output)[1]
+
+
+def _run_with_idle_timeout(
+    cmd,
+    cwd,
+    idle_timeout,
+    hard_timeout,
+    stream=False,
+    family=None,
+    live_text_to_stdout=False,
+):
     """
     Run `cmd` and kill it only if both output streams go silent for `idle_timeout` seconds
     (or total wall time exceeds `hard_timeout`). Long CLI sessions that stream
@@ -245,6 +440,11 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
     sel.register(proc.stderr, selectors.EVENT_READ, "stderr")
 
     out_buf, err_buf = [], []
+    stream_state = {
+        "emitted_text": False,
+        "last_char": "",
+        "live_text_to_stdout": live_text_to_stdout,
+    }
     last_activity = time.monotonic()
     deadline = time.monotonic() + hard_timeout
     reason = "ok"
@@ -272,6 +472,8 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
                     out_buf.append(chunk)
                 else:
                     err_buf.append(chunk)
+                if stream:
+                    _emit_live_line(family, chunk, key.data, stream_state)
             if got_data:
                 last_activity = time.monotonic()
 
@@ -296,8 +498,14 @@ def _run_with_idle_timeout(cmd, cwd, idle_timeout, hard_timeout):
             tail_out, tail_err = proc.communicate(timeout=2)
             if tail_out:
                 out_buf.append(tail_out)
+                if stream:
+                    for line in tail_out.splitlines(keepends=True):
+                        _emit_live_line(family, line, "stdout", stream_state)
             if tail_err:
                 err_buf.append(tail_err)
+                if stream:
+                    for line in tail_err.splitlines(keepends=True):
+                        _emit_live_line(family, line, "stderr", stream_state)
         except Exception as exc:
             err_buf.append(f"Failed to drain provider output after termination: {exc}")
             reason = "error"
@@ -315,6 +523,8 @@ def call_model(
     idle_timeout=None,
     access="read-only",
     provider_model=None,
+    stream=False,
+    live_text_to_stdout=False,
 ):
     """Call AI model via CLI. Pass session to resume a previous conversation.
 
@@ -329,7 +539,7 @@ def call_model(
 
     config = MODEL_COMMANDS[model_name]
     try:
-        cmd = build_command(model_name, session, access, provider_model)
+        cmd = build_command(model_name, session, access, provider_model, stream)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return None
@@ -354,7 +564,16 @@ def call_model(
             return None
         cwd = str(cwd_path.resolve())
 
-    # Combine system prompt with user prompt if provided
+    # Declare the wrapper-enforced execution boundary in the prompt as well as
+    # in provider flags. This keeps the model's instructions aligned with the
+    # actual access mode instead of relying on a fictional fixed environment.
+    context = (
+        "Execution context supplied by the CLI wrapper:\n"
+        f"- Access: {access}\n"
+        f"- Working directory: {cwd or '(provider default)'}\n"
+        "- This is already the external provider turn. Answer directly; do not "
+        "invoke another model or wrapper unless the User Request explicitly asks."
+    )
     full_prompt = prompt
     if systemprompt:
         try:
@@ -362,7 +581,12 @@ def call_model(
         except ValueError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return None
-        full_prompt = f"{systemprompt_text}\n\n---\n\nUser Request:\n{prompt}"
+        full_prompt = (
+            f"{systemprompt_text}\n\n---\n\n{context}\n\n---\n\n"
+            f"User Request:\n{prompt}"
+        )
+    elif prompt.strip():
+        full_prompt = f"{context}\n\n---\n\nUser Request:\n{prompt}"
 
     # Add prompt to command. `codex review --uncommitted` rejects a positional PROMPT,
     # so skip appending when model is that variant and the prompt is empty.
@@ -373,8 +597,30 @@ def call_model(
     # idle_timeout: kill only if both output streams are silent this long.
     hard = timeout if timeout else DEFAULT_HARD_TIMEOUT
     idle = idle_timeout if idle_timeout else config["timeout"]
+    structured_stream = _profile_uses_structured_stream(model_name, stream)
 
-    rc, out, err, reason = _run_with_idle_timeout(cmd, cwd, idle, hard)
+    rc, out, err, reason = _run_with_idle_timeout(
+        cmd,
+        cwd,
+        idle,
+        hard,
+        stream=stream,
+        family=config["family"] if structured_stream else None,
+        live_text_to_stdout=live_text_to_stdout,
+    )
+    result_out = out
+    if structured_stream:
+        recognized, extracted = _extract_stream_result_with_status(
+            config["family"], out
+        )
+        if recognized or not out:
+            result_out = extracted
+        else:
+            print(
+                f"Warning: {model_name} produced no recognized final stream event; "
+                "returning raw provider output.",
+                file=sys.stderr,
+            )
 
     if reason == "error":
         print(f"Error calling {model_name}: {err}", file=sys.stderr)
@@ -385,8 +631,8 @@ def call_model(
             f"Partial output below. Override with --idle-timeout.",
             file=sys.stderr,
         )
-        if out:
-            return out
+        if result_out:
+            return result_out
         return None
     if reason == "hard":
         print(
@@ -394,15 +640,15 @@ def call_model(
             f"Override with --timeout.",
             file=sys.stderr,
         )
-        if out:
-            return out
+        if result_out:
+            return result_out
         return None
     if rc != 0:
         print(f"Error calling {model_name} (exit {rc}):", file=sys.stderr)
         if err:
             print(err, file=sys.stderr)
         return None
-    return out
+    return result_out
 
 
 def main():
@@ -479,6 +725,14 @@ def main():
             "the provider CLI configuration unchanged."
         ),
     )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help=(
+            "Render provider progress live. Claude uses stream-json with partial "
+            "messages; Codex exec uses JSONL events. The final answer is not printed twice."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -498,6 +752,7 @@ def main():
             session=args.session,
             access=args.access,
             provider_model=args.provider_model,
+            stream=args.stream,
         )
         binary = shutil.which(cmd[0])
         print(f"\nProfile: {args.model}")
@@ -519,10 +774,19 @@ def main():
         args.idle_timeout,
         args.access,
         args.provider_model,
+        args.stream,
+        live_text_to_stdout=(
+            args.stream
+            and _profile_uses_structured_stream(args.model, args.stream)
+            and sys.stdout.isatty()
+        ),
     )
 
     if result is not None:
-        print(result)
+        structured_stream = _profile_uses_structured_stream(args.model, args.stream)
+        live_text_to_stdout = args.stream and structured_stream and sys.stdout.isatty()
+        if not args.stream or (structured_stream and not live_text_to_stdout):
+            print(result)
         return 0
     else:
         return 1

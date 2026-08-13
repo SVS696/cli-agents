@@ -1,0 +1,14 @@
+{
+  "id": "PC-003-reviewer-evidence",
+  "targets": [
+    "skills/cli-agents/systemprompts/default_codereviewer.txt",
+    "skills/cli-agents/systemprompts/codex_codereviewer.txt"
+  ],
+  "contains": [
+    "without changing it",
+    "exact file:line or symbol evidence",
+    "If no actionable findings remain, say so explicitly",
+    "Honor the User Request's focus and finding limit"
+  ],
+  "forbidden": ["full repository access", "Always conclude"]
+}

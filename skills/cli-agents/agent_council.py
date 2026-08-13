@@ -31,33 +31,52 @@ from cli_caller import DEFAULT_HARD_TIMEOUT, MODEL_COMMANDS, call_model  # noqa:
 STOP_TOKEN = "CONCLUDED"
 DEFAULT_MIN_LEN = 40  # chars; below this we treat the turn as "nothing to add"
 
-DEBATE_PREAMBLE = """You are participating in a multi-agent technical debate.
-Ground rules:
-  1. Read the full discussion below. Do NOT repeat points already made.
-  2. Add exactly ONE new contribution per turn: a concrete argument, counter-point,
-     proof request, refinement, or concrete proposal. Cite file:line if relevant.
-  3. If you genuinely have nothing new to add — reply with a single line:
-     {stop}
-  4. Be terse. Prefer 3-10 sentences over walls of text.
-  5. Do not impersonate other participants.
+DEBATE_PREAMBLE = """Role: Independent participant in a multi-agent technical debate.
 
-Your role in this debate: **{role}**
+Goal: Advance the shared question with one material contribution that is not already
+present in the transcript.
+
+Contract:
+- Read the full discussion before answering.
+- Add one argument, counterexample, proof request, refinement, or concrete proposal.
+- Ground repository claims in available file:line evidence. Label inference and missing
+  evidence instead of inventing facts.
+- Do not modify files or impersonate another participant.
+- If no material contribution remains, reply with the single line {stop}
+
+Output: Only the new contribution, with no recap of the thread.
+Your participant label: **{role}**
 """
 
-PANEL_PREAMBLE = """You are one of several expert advisors answering the same question
-independently. Give your best concrete answer. Be terse (3-10 sentences).
-Cite file:line if relevant. Do not hedge between options — take a position.
+PANEL_PREAMBLE = """Role: Independent expert advisor in a multi-model panel.
+
+Goal: Give a concrete answer to the question without seeing or anticipating the other
+panelists' answers.
+
+Contract:
+- Use available evidence and cite file:line when repository facts matter.
+- State material assumptions, conflicts, or missing evidence.
+- Make a recommendation when evidence supports one; otherwise identify the smallest
+  fact needed to choose safely.
+- Do not modify files.
+
+Output: Recommendation first, then the decisive evidence and caveats. Omit generic
+background and do not discuss the panel process.
 """
 
-SYNTH_PREAMBLE = """You are a synthesizer. Below are {n} independent expert answers to
-the same question. Produce a consensus report with three sections:
+SYNTH_PREAMBLE = """Role: Synthesizer of {n} independent expert answers.
 
-  ## Consensus   — points where all/most agree
-  ## Divergence  — where they disagree, and why
-  ## Recommendation — your own call, given the above
+Goal: Resolve the original question while preserving material agreement, disagreement,
+evidence gaps, and uncertainty from the source answers.
 
-Be terse. Do not quote the experts verbatim; attribute by name in parentheses
-when useful (e.g. "prefer pg_partman (gemini, codex)").
+Output exactly these Markdown sections:
+## Consensus
+## Divergence
+## Recommendation
+
+Attribute positions by participant label when useful. Do not invent facts or treat a
+majority vote as evidence. If the recommendation depends on missing evidence, name the
+smallest deciding check. Do not quote answers at length.
 """
 
 

@@ -24,12 +24,13 @@ class PackageContractTests(unittest.TestCase):
             return {key.value for key in node.value.keys}
         raise AssertionError("MODEL_COMMANDS not found")
 
-    def test_manifest_and_skill_versions_match(self):
+    def test_manifest_version_and_skill_frontmatter(self):
         manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
         skill = (SKILL_DIR / "SKILL.md").read_text()
-        match = re.search(r"^version:\s*(\S+)$", skill, re.MULTILINE)
-        self.assertIsNotNone(match)
-        self.assertEqual(manifest["version"], match.group(1))
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        frontmatter = skill.split("---", 2)[1]
+        keys = set(re.findall(r"^([a-z][a-z0-9_-]*):", frontmatter, re.MULTILINE))
+        self.assertEqual(keys, {"name", "description"})
 
     def test_every_system_prompt_is_documented(self):
         skill = (SKILL_DIR / "SKILL.md").read_text()
@@ -89,6 +90,33 @@ class PackageContractTests(unittest.TestCase):
                 model = cmd[cmd.index("--model") + 1]
                 with self.subTest(profile=profile):
                     self.assertIn(model, {"opus", "sonnet", "haiku"})
+
+
+class PromptCookbookRegressionTests(unittest.TestCase):
+    def test_prompt_cookbook_fixtures(self):
+        fixture_dir = ROOT / "evals" / "prompt-cookbook"
+        fixtures = sorted(fixture_dir.glob("*.json"))
+        self.assertTrue(fixtures, "Prompt Cookbook fixtures are missing")
+
+        for fixture_path in fixtures:
+            fixture = json.loads(fixture_path.read_text())
+            targets = []
+            for pattern in fixture["targets"]:
+                targets.extend(ROOT.glob(pattern))
+            self.assertTrue(targets, f"{fixture_path.name}: no targets matched")
+
+            for target in targets:
+                content = target.read_text()
+                for required in fixture.get("contains", []):
+                    with self.subTest(
+                        fixture=fixture["id"], target=str(target), required=required
+                    ):
+                        self.assertIn(required, content)
+                for forbidden in fixture.get("forbidden", []):
+                    with self.subTest(
+                        fixture=fixture["id"], target=str(target), forbidden=forbidden
+                    ):
+                        self.assertNotIn(forbidden, content)
 
 
 if __name__ == "__main__":

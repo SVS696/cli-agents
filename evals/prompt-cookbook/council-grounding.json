@@ -1,0 +1,11 @@
+{
+  "id": "PC-005-council-grounding",
+  "targets": ["skills/cli-agents/agent_council.py"],
+  "contains": [
+    "Label inference and missing",
+    "majority vote as evidence",
+    "smallest deciding check",
+    "Do not modify files"
+  ],
+  "forbidden": ["Do not hedge between options", "Prefer 3-10 sentences"]
+}
