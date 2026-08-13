@@ -568,12 +568,18 @@ def call_model(
     # in provider flags. This keeps the model's instructions aligned with the
     # actual access mode instead of relying on a fictional fixed environment.
     context = (
-        "Execution context supplied by the CLI wrapper:\n"
+        "Execution boundary supplied by the CLI wrapper:\n"
         f"- Access: {access}\n"
         f"- Working directory: {cwd or '(provider default)'}\n"
-        "- This is already the external provider turn. Answer directly; do not "
-        "invoke another model or wrapper unless the User Request explicitly asks."
+        "- This is already the external provider turn. Complete the request in this "
+        "turn; do not invoke another model or wrapper unless explicitly requested."
     )
+    if config["family"] == "claude" and access == "read-only":
+        context += (
+            "\n- Permission mode plan is used only to enforce non-mutation. Return "
+            "the requested analysis and final response without creating a plan file "
+            "or calling ExitPlanMode."
+        )
     full_prompt = prompt
     if systemprompt:
         try:
@@ -581,6 +587,15 @@ def call_model(
         except ValueError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return None
+    else:
+        systemprompt_text = None
+
+    if config["family"] == "claude":
+        provider_instructions = context
+        if systemprompt_text:
+            provider_instructions = f"{systemprompt_text}\n\n{context}"
+        cmd.extend(["--append-system-prompt", provider_instructions])
+    elif systemprompt_text:
         full_prompt = (
             f"{systemprompt_text}\n\n---\n\n{context}\n\n---\n\n"
             f"User Request:\n{prompt}"

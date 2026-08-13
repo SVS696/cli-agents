@@ -443,7 +443,7 @@ class RuntimeTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[-1], 'approval_policy="never"')
 
-    def test_nonempty_prompt_declares_actual_execution_context(self):
+    def test_claude_uses_real_system_channel_for_execution_context(self):
         with (
             mock.patch.object(
                 cli_caller.shutil, "which", return_value="/usr/bin/claude"
@@ -464,11 +464,65 @@ class RuntimeTests(unittest.TestCase):
                 "done",
             )
 
-        prompt = run.call_args.args[0][-1]
-        self.assertIn("Execution context supplied by the CLI wrapper:", prompt)
+        command = run.call_args.args[0]
+        self.assertEqual(command[-1], "Review this")
+        self.assertIn("--append-system-prompt", command)
+        instructions = command[command.index("--append-system-prompt") + 1]
+        self.assertIn("Execution boundary supplied by the CLI wrapper:", instructions)
+        self.assertIn("- Access: read-only", instructions)
+        self.assertIn(f"- Working directory: {ROOT.resolve()}", instructions)
+        self.assertIn("This is already the external provider turn", instructions)
+        self.assertIn("Permission mode plan is used only", instructions)
+
+    def test_claude_named_role_is_appended_as_system_prompt(self):
+        with (
+            mock.patch.object(
+                cli_caller.shutil, "which", return_value="/usr/bin/claude"
+            ),
+            mock.patch.object(
+                cli_caller,
+                "_run_with_idle_timeout",
+                return_value=(0, "done", "", "ok"),
+            ) as run,
+        ):
+            self.assertEqual(
+                cli_caller.call_model(
+                    "claude", "Review this", systemprompt="default_codereviewer"
+                ),
+                "done",
+            )
+        command = run.call_args.args[0]
+        instructions = command[command.index("--append-system-prompt") + 1]
+        self.assertIn("Role: External code reviewer.", instructions)
+        self.assertEqual(command[-1], "Review this")
+
+    def test_codex_keeps_execution_context_in_user_prompt(self):
+        with (
+            mock.patch.object(
+                cli_caller.shutil, "which", return_value="/usr/bin/codex"
+            ),
+            mock.patch.object(
+                cli_caller,
+                "_run_with_idle_timeout",
+                return_value=(0, "done", "", "ok"),
+            ) as run,
+        ):
+            self.assertEqual(
+                cli_caller.call_model(
+                    "codex",
+                    "Review this",
+                    cwd=str(ROOT),
+                    access="read-only",
+                ),
+                "done",
+            )
+
+        command = run.call_args.args[0]
+        self.assertNotIn("--append-system-prompt", command)
+        prompt = command[-1]
+        self.assertIn("Execution boundary supplied by the CLI wrapper:", prompt)
         self.assertIn("- Access: read-only", prompt)
         self.assertIn(f"- Working directory: {ROOT.resolve()}", prompt)
-        self.assertIn("This is already the external provider turn", prompt)
         self.assertIn("User Request:\nReview this", prompt)
 
 

@@ -85,6 +85,16 @@ python3 agent_council.py --mode debate \
   --output /tmp/queue-debate.md
 ```
 
+## Что изменилось в 3.0.2
+
+- Claude получает роль и execution boundary через настоящий
+  `--append-system-prompt`; пользовательский запрос остаётся отдельным user message;
+- потоковый parser устойчив к пустым, скалярным и частично повреждённым JSONL-events;
+- live-вывод больше не склеивает текст вокруг tool calls и не дублирует финал в
+  интерактивном терминале;
+- read-only review проверен живыми Claude Haiku/Sonnet без plan-file, рекурсии и
+  вызова `ExitPlanMode`.
+
 ## Что изменилось в 3.0.1
 
 - системные промпты переписаны по текущему OpenAI Prompting Cookbook/GPT-5.6

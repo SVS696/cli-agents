@@ -2,11 +2,11 @@
   "id": "PC-004-execution-context",
   "targets": ["skills/cli-agents/cli_caller.py"],
   "contains": [
-    "Execution context supplied by the CLI wrapper:",
+    "Execution boundary supplied by the CLI wrapper:",
     "- Access: {access}",
     "- Working directory: {cwd or '(provider default)'}",
     "This is already the external provider turn",
-    "User Request:"
+    "--append-system-prompt"
   ],
   "forbidden": ["Zen MCP server"]
 }

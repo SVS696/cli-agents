@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cli-agents",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Внешние Claude и Codex CLI для независимого review, дискуссий и multi-model council. Read-only по умолчанию; Gemini опционален.",
   "author": {
     "name": "SVS696",
